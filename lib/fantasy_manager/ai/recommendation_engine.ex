@@ -113,6 +113,135 @@ defmodule FantasyManager.AI.RecommendationEngine do
       {:error, reason} -> {:error, reason}
     end
   end
+
+  @doc """
+  Get waiver wire pickup recommendations for a fantasy team.
+  
+  ## Parameters
+  - team_id: UUID of the fantasy team
+  - week: NFL week number (1-18) 
+  - season: NFL season year
+  
+  ## Returns
+  {:ok, %{pickups: [player_recommendations], reasoning: string}} | {:error, reason}
+  """
+  def get_waiver_recommendations(team_id, week, season) do
+    with {:ok, team} <- get_team_with_players(team_id),
+         {:ok, league} <- Ash.get(League, team.league_id) do
+      
+      # For now, return a mock response since the full waiver logic isn't implemented
+      {:ok, %{
+        pickups: [
+          %{
+            "name" => "Sample Available Player",
+            "position" => "WR",
+            "team" => "LAR",
+            "priority" => "high",
+            "reasoning" => "Strong matchup this week with potential for big game",
+            "drop_candidate" => "Current bench player with tough schedule"
+          }
+        ],
+        reasoning: "Based on your team's current roster and upcoming matchups, these pickup recommendations could provide immediate value."
+      }}
+    else
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Optimize keeper selections for a fantasy team.
+  
+  ## Parameters
+  - team_id: UUID of the fantasy team
+  - season: NFL season year
+  - options: Optional parameters (keeper_count, etc.)
+  
+  ## Returns
+  {:ok, %{keepers: [keeper_recommendations], strategy: string, reasoning: string}} | {:error, reason}
+  """
+  def optimize_keepers(team_id, season, _options \\ []) do
+    with {:ok, team} <- get_team_with_players(team_id),
+         {:ok, _league} <- Ash.get(League, team.league_id) do
+      
+      # For now, return a mock response since the full keeper logic isn't implemented
+      {:ok, %{
+        keepers: [
+          %{
+            "name" => "Josh Allen",
+            "position" => "QB", 
+            "cost" => 45,
+            "value_rating" => "excellent"
+          },
+          %{
+            "name" => "Christian McCaffrey",
+            "position" => "RB",
+            "cost" => 65,
+            "value_rating" => "good"
+          }
+        ],
+        strategy: "balanced",
+        total_cost: 110,
+        reasoning: "These keeper selections provide a strong foundation while maintaining salary cap flexibility for the draft."
+      }}
+    else
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Create a dynasty planning strategy for a fantasy team.
+  
+  ## Parameters
+  - team_id: UUID of the fantasy team
+  - timeline: Planning timeline ("immediate", "medium", "rebuild")
+  - options: Optional parameters
+  
+  ## Returns
+  {:ok, %{strategy: string, competitive_window: string, key_players: [...], reasoning: string}} | {:error, reason}
+  """
+  def create_dynasty_plan(team_id, timeline \\ "medium", _options \\ []) do
+    with {:ok, team} <- get_team_with_players(team_id),
+         {:ok, _league} <- Ash.get(League, team.league_id) do
+      
+      # For now, return a mock response since the full dynasty logic isn't implemented
+      strategy_description = case timeline do
+        "immediate" -> "Focus on veteran players and win-now moves"
+        "rebuild" -> "Prioritize young talent and draft capital accumulation"
+        _ -> "Balance competing now with building for the future"
+      end
+
+      {:ok, %{
+        competitive_window: "Your team is currently in a #{timeline} competitive window",
+        strategy: strategy_description,
+        timeline: "Expect to compete at the highest level within 1-2 seasons",
+        key_players: [
+          %{
+            "name" => "Ja'Marr Chase",
+            "position" => "WR",
+            "age" => 24,
+            "action" => "keep",
+            "reasoning" => "Elite young talent with years of production ahead"
+          },
+          %{
+            "name" => "Derrick Henry",
+            "position" => "RB", 
+            "age" => 30,
+            "action" => "consider_trading",
+            "reasoning" => "Aging RB who could return significant value in trade"
+          }
+        ],
+        trade_targets: [
+          %{
+            "name" => "Jaylen Waddle",
+            "rationale" => "Young WR with high upside for dynasty"
+          }
+        ],
+        reasoning: "Your dynasty strategy should focus on maintaining competitive balance while building for sustained success over multiple seasons."
+      }}
+    else
+      {:error, reason} -> {:error, reason}
+    end
+  end
   
   @doc """
   Test the AI connection and basic functionality.
