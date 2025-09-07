@@ -71,27 +71,27 @@ Focus on core functionality for browser testing:
 
 ## Phase 3.3: Core Domain Models (ONLY after tests are failing)
 
-- [ ] **T011** [P] Player Ash resource
+- [x] **T011** [P] Player Ash resource
   - Path: `lib/fantasy_manager/fantasy/player.ex`
   - Implement Player resource from data-model.md with Sleeper API integration
   - Include calculations, validations, and AI vectorization setup
 
-- [ ] **T012** [P] League Ash resource  
+- [x] **T012** [P] League Ash resource  
   - Path: `lib/fantasy_manager/fantasy/league.ex`
   - Implement League resource with keeper/dynasty settings
   - Include team relationships and validation rules
 
-- [ ] **T013** [P] FantasyTeam Ash resource
+- [x] **T013** [P] FantasyTeam Ash resource
   - Path: `lib/fantasy_manager/fantasy/fantasy_team.ex`
   - Implement team resource with roster management
   - Include competitive window and roster relationships
 
-- [ ] **T014** [P] WeeklyProjection Ash resource
+- [x] **T014** [P] WeeklyProjection Ash resource
   - Path: `lib/fantasy_manager/fantasy/weekly_projection.ex`
   - Implement AI projections resource for recommendations
   - Include confidence scoring and model versioning
 
-- [ ] **T015** Create database migrations for core entities
+- [x] **T015** Create database migrations for core entities
   - Path: `priv/repo/migrations/001_create_core_tables.exs`
   - Migrate Player, League, FantasyTeam, WeeklyProjection tables
   - Include indexes and constraints from data-model.md
