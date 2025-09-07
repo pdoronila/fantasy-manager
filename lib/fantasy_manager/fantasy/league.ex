@@ -170,14 +170,11 @@ defmodule FantasyManager.Fantasy.League do
       message "Trade deadline must be between weeks 1 and 17"
     end
 
-    validate {FantasyManager.Fantasy.League.Validations, :keeper_count_valid} do
-      on [:create, :update]
-    end
+    validate FantasyManager.Fantasy.League.Validations.keeper_count_valid(),
+      on: [:create, :update]
 
-    validate {FantasyManager.Fantasy.League.Validations, :dynasty_transition_year_valid} do
-      on [:create, :update]
-      only_when_attribute_changes [:dynasty_transition_year, :league_type]
-    end
+    validate FantasyManager.Fantasy.League.Validations.dynasty_transition_year_valid(),
+      on: [:create, :update]
   end
 
   changes do
@@ -185,22 +182,18 @@ defmodule FantasyManager.Fantasy.League do
       on [:create]
     end
 
-    change before_action(:set_default_scoring_settings) do
-      on [:create]
-      only_when_attribute_changes [:scoring_format]
-    end
+    change before_action(:set_default_scoring_settings),
+      on: [:create]
 
-    change before_action(:validate_keeper_settings) do
-      on [:create, :update]
-      only_when_attribute_changes [:league_type, :keeper_count]
-    end
+    change before_action(:validate_keeper_settings),
+      on: [:create, :update]
   end
 
   actions do
     defaults [:create, :read, :update, :destroy]
 
     create :create_from_sleeper do
-      argument :sleeper_data, :map, allow_nil? false
+      argument :sleeper_data, :map, allow_nil?: false
       argument :sync_teams, :boolean, default: true
       
       change fn changeset, context ->
@@ -227,7 +220,7 @@ defmodule FantasyManager.Fantasy.League do
     end
 
     update :update_trade_deadline do
-      argument :deadline_week, :integer, allow_nil? false
+      argument :deadline_week, :integer, allow_nil?: false
 
       validate compare(:deadline_week, greater_than_or_equal_to: 1, less_than_or_equal_to: 17)
 
@@ -235,13 +228,13 @@ defmodule FantasyManager.Fantasy.League do
     end
 
     read :by_season do
-      argument :season, :integer, allow_nil? false
+      argument :season, :integer, allow_nil?: false
 
       filter expr(season == ^arg(:season))
     end
 
     read :by_league_type do
-      argument :type, :atom, allow_nil? false
+      argument :type, :atom, allow_nil?: false
 
       filter expr(league_type == ^arg(:type))
     end
@@ -255,13 +248,13 @@ defmodule FantasyManager.Fantasy.League do
     end
 
     read :active_leagues do
-      argument :current_season, :integer, default: fragment("EXTRACT(year FROM now())")
+      argument :current_season, :integer, default: 2025
 
       filter expr(season >= ^arg(:current_season))
     end
 
     action :sync_from_sleeper, :map do
-      argument :sleeper_id, :string, allow_nil? false
+      argument :sleeper_id, :string, allow_nil?: false
       argument :full_sync, :boolean, default: false
 
       run fn input, context ->
@@ -294,7 +287,7 @@ defmodule FantasyManager.Fantasy.League do
     end
 
     action :generate_schedule, :map do
-      argument :season, :integer, allow_nil? false
+      argument :season, :integer, allow_nil?: false
       
       run fn input, context ->
         season = input.arguments.season
@@ -312,7 +305,7 @@ defmodule FantasyManager.Fantasy.League do
   end
 
   code_interface do
-    define_for FantasyManager.Fantasy
+    domain FantasyManager.Fantasy
 
     define :create
     define :read

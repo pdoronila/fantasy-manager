@@ -159,11 +159,12 @@ defmodule FantasyManager.Fantasy.WeeklyProjection do
       projected_points * 
       (1.0 - (injury_risk_factor * 0.3)) *
       (1.0 + weather_impact * 0.1) *
-      case matchup_difficulty do
-        :easy -> 1.15
-        :moderate -> 1.0
-        :difficult -> 0.85
-        :elite -> 0.7
+      cond do
+        matchup_difficulty == :easy -> 1.15
+        matchup_difficulty == :moderate -> 1.0
+        matchup_difficulty == :difficult -> 0.85
+        matchup_difficulty == :elite -> 0.7
+        true -> 1.0
       end
     )
 
@@ -195,8 +196,8 @@ defmodule FantasyManager.Fantasy.WeeklyProjection do
       message "Confidence score must be between 0 and 1"
     end
 
-    validate {FantasyManager.Fantasy.WeeklyProjection.Validations, :projection_not_in_past}
-    validate {FantasyManager.Fantasy.WeeklyProjection.Validations, :stat_projections_consistent}
+    validate FantasyManager.Fantasy.WeeklyProjection.Validations.projection_not_in_past()
+    validate FantasyManager.Fantasy.WeeklyProjection.Validations.stat_projections_consistent()
   end
 
   changes do
@@ -217,9 +218,9 @@ defmodule FantasyManager.Fantasy.WeeklyProjection do
     defaults [:create, :read, :update, :destroy]
 
     create :generate_ai_projection do
-      argument :player_id, :uuid, allow_nil? false
-      argument :season, :integer, allow_nil? false
-      argument :week, :integer, allow_nil? false
+      argument :player_id, :uuid, allow_nil?: false
+      argument :season, :integer, allow_nil?: false
+      argument :week, :integer, allow_nil?: false
       argument :context_factors, :map, default: %{}
       
       change fn changeset, context ->
@@ -251,8 +252,8 @@ defmodule FantasyManager.Fantasy.WeeklyProjection do
     end
 
     update :adjust_projection do
-      argument :adjustment_factor, :decimal, allow_nil? false
-      argument :reason, :string, allow_nil? false
+      argument :adjustment_factor, :decimal, allow_nil?: false
+      argument :reason, :string, allow_nil?: false
 
       validate compare(:adjustment_factor, greater_than: 0.0, less_than: 3.0) do
         message "Adjustment factor must be between 0 and 3"
@@ -280,22 +281,22 @@ defmodule FantasyManager.Fantasy.WeeklyProjection do
     end
 
     read :for_player_and_week do
-      argument :player_id, :uuid, allow_nil? false
-      argument :season, :integer, allow_nil? false
-      argument :week, :integer, allow_nil? false
+      argument :player_id, :uuid, allow_nil?: false
+      argument :season, :integer, allow_nil?: false
+      argument :week, :integer, allow_nil?: false
 
       filter expr(player_id == ^arg(:player_id) and season == ^arg(:season) and week == ^arg(:week))
     end
 
     read :for_week do
-      argument :season, :integer, allow_nil? false
-      argument :week, :integer, allow_nil? false
+      argument :season, :integer, allow_nil?: false
+      argument :week, :integer, allow_nil?: false
 
       filter expr(season == ^arg(:season) and week == ^arg(:week))
     end
 
     read :for_season do
-      argument :season, :integer, allow_nil? false
+      argument :season, :integer, allow_nil?: false
 
       filter expr(season == ^arg(:season))
     end
@@ -313,7 +314,7 @@ defmodule FantasyManager.Fantasy.WeeklyProjection do
     end
 
     read :by_model do
-      argument :model, :string, allow_nil? false
+      argument :model, :string, allow_nil?: false
 
       filter expr(projection_model == ^arg(:model))
     end
@@ -323,8 +324,8 @@ defmodule FantasyManager.Fantasy.WeeklyProjection do
     end
 
     read :top_projections do
-      argument :season, :integer, allow_nil? false
-      argument :week, :integer, allow_nil? false
+      argument :season, :integer, allow_nil?: false
+      argument :week, :integer, allow_nil?: false
       argument :position, :atom
       argument :limit, :integer, default: 20
 
@@ -338,14 +339,13 @@ defmodule FantasyManager.Fantasy.WeeklyProjection do
         end
       )
 
-      sort [projected_points: :desc]
-      limit expr(arg(:limit))
+      prepare build(sort: [projected_points: :desc], limit: expr(arg(:limit)))
     end
 
     action :batch_generate_projections, :map do
-      argument :player_ids, {:array, :uuid}, allow_nil? false
-      argument :season, :integer, allow_nil? false
-      argument :week, :integer, allow_nil? false
+      argument :player_ids, {:array, :uuid}, allow_nil?: false
+      argument :season, :integer, allow_nil?: false
+      argument :week, :integer, allow_nil?: false
       
       run fn input, context ->
         player_ids = input.arguments.player_ids
@@ -377,7 +377,7 @@ defmodule FantasyManager.Fantasy.WeeklyProjection do
     end
 
     action :evaluate_accuracy, :map do
-      argument :season, :integer, allow_nil? false
+      argument :season, :integer, allow_nil?: false
       argument :weeks, {:array, :integer}, default: []
       
       run fn input, context ->
@@ -392,7 +392,7 @@ defmodule FantasyManager.Fantasy.WeeklyProjection do
   end
 
   code_interface do
-    define_for FantasyManager.Fantasy
+    domain FantasyManager.Fantasy
 
     define :create
     define :read

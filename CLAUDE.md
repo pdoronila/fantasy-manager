@@ -12,23 +12,26 @@ Auto-generated from all feature plans. Last updated: 2025-09-07
 
 ## Project Structure
 ```
-backend/
-├── lib/fantasy_manager/
-│   ├── fantasy/              # Core fantasy domain (Ash resources)
-│   │   ├── resources/        # Player, Team, League resources
-│   │   └── calculations/     # Fantasy projections and analysis
-│   ├── external/             # External API integrations
-│   │   ├── sleeper/          # Sleeper API client and resources
-│   │   └── nfl_data/         # NFL statistics APIs
-│   ├── ai/                   # AI-powered recommendations
-│   │   ├── recommendation_engine.ex
-│   │   └── tools.ex
-│   └── cache/                # Caching strategies
+├── lib/
+│   ├── fantasy_manager/           # Core fantasy domain
+│   │   ├── fantasy/              # Fantasy domain (Ash resources)
+│   │   └── external/             # External API integrations
+│   ├── fantasy_manager_core/     # Application core
+│   │   ├── application.ex
+│   │   ├── repo.ex
+│   │   └── mailer.ex
+│   ├── fantasy_manager_web/      # Web interface
+│   │   ├── controllers/
+│   │   ├── components/
+│   │   └── endpoint.ex
+│   └── fantasy_manager.ex        # Main application module
 ├── test/
-│   ├── fantasy_manager/      # Unit tests
-│   ├── integration/          # Integration tests
-│   └── contracts/            # API contract tests
-└── priv/repo/migrations/     # Database migrations
+│   ├── fantasy_manager_web/      # Web tests
+│   ├── integration/              # Integration tests
+│   └── support/                  # Test support files
+├── config/                       # Configuration files
+├── priv/repo/migrations/         # Database migrations
+└── mix.exs                       # Project configuration
 ```
 
 ## Commands

@@ -186,7 +186,7 @@ defmodule FantasyManager.Fantasy.Player do
     defaults [:create, :read, :update, :destroy]
 
     create :create_from_sleeper do
-      argument :sleeper_data, :map, allow_nil? false
+      argument :sleeper_data, :map, allow_nil?: false
       
       change fn changeset, context ->
         sleeper_data = Ash.Changeset.get_argument(changeset, :sleeper_data)
@@ -203,7 +203,7 @@ defmodule FantasyManager.Fantasy.Player do
     end
 
     update :update_dynasty_value do
-      argument :new_value, :decimal, allow_nil? false
+      argument :new_value, :decimal, allow_nil?: false
 
       validate compare(:new_value, greater_than_or_equal_to: 0.0, less_than_or_equal_to: 100.0)
 
@@ -211,7 +211,7 @@ defmodule FantasyManager.Fantasy.Player do
     end
 
     update :update_injury_status do
-      argument :status, :atom, allow_nil? false
+      argument :status, :atom, allow_nil?: false
       argument :injury_details, :string
 
       change set_attribute(:injury_status, arg(:status))
@@ -229,13 +229,13 @@ defmodule FantasyManager.Fantasy.Player do
     end
 
     read :by_position do
-      argument :position, :atom, allow_nil? false
+      argument :position, :atom, allow_nil?: false
 
       filter expr(position == ^arg(:position))
     end
 
     read :by_nfl_team do
-      argument :team, :string, allow_nil? false
+      argument :team, :string, allow_nil?: false
 
       filter expr(nfl_team == ^arg(:team))
     end
@@ -252,7 +252,7 @@ defmodule FantasyManager.Fantasy.Player do
     end
 
     read :search do
-      argument :query, :string, allow_nil? false
+      argument :query, :string, allow_nil?: false
 
       filter expr(ilike(name, ^("%#{arg(:query)}%")))
     end
@@ -262,7 +262,7 @@ defmodule FantasyManager.Fantasy.Player do
     end
 
     action :sync_from_sleeper, :map do
-      argument :sleeper_id, :string, allow_nil? false
+      argument :sleeper_id, :string, allow_nil?: false
 
       run fn input, context ->
         sleeper_id = input.arguments.sleeper_id

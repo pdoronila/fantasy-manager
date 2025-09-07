@@ -103,8 +103,10 @@ defmodule FantasyManager.Fantasy.FantasyTeam do
       destination_attribute :fantasy_team_id
     end
 
-    has_many :players, FantasyManager.Fantasy.Player do
-      through :fantasy_team_players
+    many_to_many :players, FantasyManager.Fantasy.Player do
+      through FantasyManager.Fantasy.FantasyTeamPlayer
+      source_attribute_on_join_resource :fantasy_team_id
+      destination_attribute_on_join_resource :player_id
     end
 
     has_many :keeper_contracts, FantasyManager.Fantasy.KeeperContract do
@@ -126,7 +128,7 @@ defmodule FantasyManager.Fantasy.FantasyTeam do
 
   calculations do
     calculate :win_percentage, :decimal, expr(
-      case do
+      cond do
         wins + losses + ties == 0 -> 0.0
         true -> wins / (wins + losses + ties)
       end
@@ -203,9 +205,9 @@ defmodule FantasyManager.Fantasy.FantasyTeam do
   validations do
     validate present([:name, :owner_name, :sleeper_id, :league_id])
 
-    validate {FantasyManager.Fantasy.FantasyTeam.Validations, :faab_budget_within_league_limits}
-    validate {FantasyManager.Fantasy.FantasyTeam.Validations, :waiver_priority_unique_within_league}
-    validate {FantasyManager.Fantasy.FantasyTeam.Validations, :roster_size_within_league_limits}
+    validate FantasyManager.Fantasy.FantasyTeam.Validations.faab_budget_within_league_limits()
+    validate FantasyManager.Fantasy.FantasyTeam.Validations.waiver_priority_unique_within_league()
+    validate FantasyManager.Fantasy.FantasyTeam.Validations.roster_size_within_league_limits()
   end
 
   changes do
@@ -213,24 +215,20 @@ defmodule FantasyManager.Fantasy.FantasyTeam do
       on [:create]
     end
 
-    change before_action(:calculate_competitive_window) do
-      on [:create, :update]
-      only_when_attribute_changes [:wins, :losses, :points_for]
-    end
+    change before_action(:calculate_competitive_window),
+      on: [:create, :update]
 
-    change after_action(:update_league_standings) do
-      on [:update]
-      only_when_attribute_changes [:wins, :losses, :points_for]
-    end
+    change after_action(:update_league_standings),
+      on: [:update]
   end
 
   actions do
     defaults [:create, :read, :update, :destroy]
 
     create :create_from_sleeper do
-      argument :sleeper_data, :map, allow_nil? false
-      argument :user_data, :map, allow_nil? false
-      argument :league_id, :uuid, allow_nil? false
+      argument :sleeper_data, :map, allow_nil?: false
+      argument :user_data, :map, allow_nil?: false
+      argument :league_id, :uuid, allow_nil?: false
       
       change fn changeset, context ->
         sleeper_data = Ash.Changeset.get_argument(changeset, :sleeper_data)
@@ -254,7 +252,7 @@ defmodule FantasyManager.Fantasy.FantasyTeam do
     end
 
     update :update_competitive_window do
-      argument :window, :atom, allow_nil? false
+      argument :window, :atom, allow_nil?: false
 
       validate attribute_in(:window, [:Contending, :Rebuilding, :Neutral])
 
@@ -276,9 +274,9 @@ defmodule FantasyManager.Fantasy.FantasyTeam do
     end
 
     update :make_waiver_claim do
-      argument :player_id, :uuid, allow_nil? false
+      argument :player_id, :uuid, allow_nil?: false
       argument :drop_player_id, :uuid
-      argument :bid_amount, :integer, allow_nil? false
+      argument :bid_amount, :integer, allow_nil?: false
 
       validate compare(:bid_amount, greater_than: 0, less_than_or_equal_to: expr(faab_budget))
 
@@ -291,34 +289,31 @@ defmodule FantasyManager.Fantasy.FantasyTeam do
     end
 
     read :in_league do
-      argument :league_id, :uuid, allow_nil? false
+      argument :league_id, :uuid, allow_nil?: false
 
       filter expr(league_id == ^arg(:league_id))
     end
 
     read :by_competitive_window do
-      argument :window, :atom, allow_nil? false
+      argument :window, :atom, allow_nil?: false
 
       filter expr(competitive_window == ^arg(:window))
     end
 
     read :playoff_contenders do
-      argument :league_id, :uuid, allow_nil? false
+      argument :league_id, :uuid, allow_nil?: false
 
       filter expr(league_id == ^arg(:league_id))
-      sort [win_percentage: :desc, points_for: :desc]
-      limit 6
     end
 
     read :standings do
-      argument :league_id, :uuid, allow_nil? false
+      argument :league_id, :uuid, allow_nil?: false
 
       filter expr(league_id == ^arg(:league_id))
-      sort [win_percentage: :desc, points_for: :desc]
     end
 
     read :search_teams do
-      argument :query, :string, allow_nil? false
+      argument :query, :string, allow_nil?: false
 
       filter expr(ilike(name, ^("%#{arg(:query)}%")) or ilike(owner_name, ^("%#{arg(:query)}%")))
     end
@@ -347,7 +342,7 @@ defmodule FantasyManager.Fantasy.FantasyTeam do
     end
 
     action :sync_roster_from_sleeper, :map do
-      argument :sleeper_roster_data, :map, allow_nil? false
+      argument :sleeper_roster_data, :map, allow_nil?: false
 
       run fn input, context ->
         team = context.resource
@@ -364,7 +359,7 @@ defmodule FantasyManager.Fantasy.FantasyTeam do
   end
 
   code_interface do
-    define_for FantasyManager.Fantasy
+    domain FantasyManager.Fantasy
 
     define :create
     define :read
