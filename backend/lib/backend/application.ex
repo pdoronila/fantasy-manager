@@ -18,6 +18,8 @@ defmodule Backend.Application do
       Supervisor.child_spec({Cachex, name: :api_cache, options: [ttl: :timer.hours(1)]}, id: :api_cache),
       Supervisor.child_spec({Cachex, name: :player_cache, options: [ttl: :timer.hours(24)]}, id: :player_cache),
       Supervisor.child_spec({Cachex, name: :projection_cache, options: [ttl: :timer.minutes(30)]}, id: :projection_cache),
+      # Sleeper API cache with multi-level TTL
+      Supervisor.child_spec({Cachex, name: :sleeper_cache, options: [ttl: :timer.hours(1), max_size: 10_000]}, id: :sleeper_cache),
       # Start to serve requests, typically the last entry
       BackendWeb.Endpoint
     ]

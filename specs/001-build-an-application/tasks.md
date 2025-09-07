@@ -1,4 +1,4 @@
-# Tasks: Sleeper Keeper/Dynasty Fantasy Football Management Assistant MVP
+how# Tasks: Sleeper Keeper/Dynasty Fantasy Football Management Assistant MVP
 
 **Input**: Design documents from `/specs/001-build-an-application/`
 **Prerequisites**: plan.md, research.md, data-model.md, contracts/, quickstart.md
@@ -98,17 +98,17 @@ Focus on core functionality for browser testing:
 
 ## Phase 3.4: External API Integration
 
-- [ ] **T016** [P] Sleeper API client with caching
+- [x] **T016** [P] Sleeper API client with caching
   - Path: `lib/fantasy_manager/external/sleeper_client.ex`
   - Implement Tesla client with Cachex integration
   - Handle rate limiting, error responses, data transformation
 
-- [ ] **T017** [P] Sleeper custom data layer for Ash
+- [x] **T017** [P] Sleeper custom data layer for Ash
   - Path: `lib/fantasy_manager/external/sleeper_data_layer.ex`
   - Implement Ash.DataLayer behavior for external API
   - Include caching strategy and query optimization
 
-- [ ] **T018** [P] Mock data generators for offline testing
+- [x] **T018** [P] Mock data generators for offline testing
   - Path: `lib/fantasy_manager/test_support/mock_data.ex`
   - Generate realistic player, league, and team data
   - Support browser testing without external API dependencies
