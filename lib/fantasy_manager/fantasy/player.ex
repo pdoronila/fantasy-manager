@@ -153,7 +153,11 @@ defmodule FantasyManager.Fantasy.Player do
   end
 
   actions do
-    defaults [:create, :read, :update, :destroy]
+    defaults [:read, :update, :destroy]
+    
+    create :create do
+      accept [:name, :position, :nfl_team, :sleeper_id, :injury_status, :years_pro, :age, :rookie_year, :dynasty_value, :keeper_eligible, :state]
+    end
 
     create :create_from_sleeper do
       argument :sleeper_data, :map, allow_nil?: false
@@ -163,6 +167,23 @@ defmodule FantasyManager.Fantasy.Player do
         
         changeset
         |> Ash.Changeset.change_attribute(:sleeper_id, sleeper_data["player_id"])
+        |> Ash.Changeset.change_attribute(:name, sleeper_data["full_name"])
+        |> Ash.Changeset.change_attribute(:position, normalize_position(sleeper_data["position"]))
+        |> Ash.Changeset.change_attribute(:nfl_team, sleeper_data["team"])
+        |> Ash.Changeset.change_attribute(:years_pro, sleeper_data["years_exp"] || 0)
+        |> Ash.Changeset.change_attribute(:age, calculate_age(sleeper_data))
+        |> Ash.Changeset.change_attribute(:injury_status, normalize_injury_status(sleeper_data["injury_status"]))
+      end
+    end
+
+    update :update_from_sleeper do
+      argument :sleeper_data, :map, allow_nil?: false
+      require_atomic? false
+      
+      change fn changeset, context ->
+        sleeper_data = Ash.Changeset.get_argument(changeset, :sleeper_data)
+        
+        changeset
         |> Ash.Changeset.change_attribute(:name, sleeper_data["full_name"])
         |> Ash.Changeset.change_attribute(:position, normalize_position(sleeper_data["position"]))
         |> Ash.Changeset.change_attribute(:nfl_team, sleeper_data["team"])
@@ -268,6 +289,7 @@ defmodule FantasyManager.Fantasy.Player do
     define :update
     define :destroy
     define :create_from_sleeper, args: [:sleeper_data]
+    define :update_from_sleeper, args: [:sleeper_data]
     define :update_dynasty_value, args: [:new_value]
     define :update_injury_status, args: [:status, :injury_details]
     define :by_position, args: [:position]
@@ -384,4 +406,33 @@ defmodule FantasyManager.Fantasy.Player do
   end
 
   # Removed transition_state function - now using direct attribute changes
+
+  # Upsert helper function
+  def upsert_from_sleeper(sleeper_data) do
+    sleeper_id = sleeper_data["player_id"]
+    
+    # Check if the position is supported for fantasy football
+    normalized_position = normalize_position(sleeper_data["position"])
+    if is_nil(normalized_position) do
+      # Skip players with unsupported positions (like CB, OL, etc.)
+      {:ok, {:skipped, :unsupported_position}}
+    else
+      case by_sleeper_id(sleeper_id) do
+        {:ok, [player | _]} ->
+          # Player exists, update it
+          case update_from_sleeper(player, sleeper_data) do
+            {:ok, updated_player} -> {:ok, {:updated, updated_player}}
+            {:error, _} = error -> error
+          end
+        {:ok, []} ->
+          # Player doesn't exist, create it
+          case create_from_sleeper(sleeper_data) do
+            {:ok, created_player} -> {:ok, {:created, created_player}}
+            {:error, _} = error -> error
+          end
+        {:error, _reason} = error ->
+          error
+      end
+    end
+  end
 end

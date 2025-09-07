@@ -159,27 +159,27 @@ Focus on core functionality for browser testing:
 
 ## Phase 3.7: Integration and Polish
 
-- [ ] **T027** Configure router and API versioning
+- [x] **T027** Configure router and API versioning
   - Path: `lib/fantasy_manager_web/router.ex`
   - Setup API routes, web routes, and LiveView socket
   - Include proper error handling and request logging
 
-- [ ] **T028** Application supervision and cache setup
+- [x] **T028** Application supervision and cache setup
   - Path: `lib/fantasy_manager/application.ex`
   - Configure Cachex, Oban (if needed), and other supervised processes
   - Include health check endpoints
 
-- [ ] **T029** [P] Seed data for local testing
+- [x] **T029** [P] Seed data for local testing
   - Path: `priv/repo/seeds.exs`
   - Create sample leagues, teams, players for browser testing
   - Include mock Sleeper data for offline development
 
-- [ ] **T030** [P] Development configuration and README
+- [x] **T030** [P] Development configuration and README
   - Path: `README.md`, `config/dev.exs.template`
   - Document MVP setup process for browser testing
   - Include environment variables and API key setup
 
-- [ ] **T031** Browser testing validation
+- [x] **T031** Browser testing validation
   - Path: Run quickstart.md user journeys in browser
   - Verify: League creation, player search, recommendations work
   - Test both with and without external API access

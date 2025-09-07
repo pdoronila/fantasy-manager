@@ -540,27 +540,13 @@ defmodule FantasyManager.Fantasy.League do
       |> Enum.reduce(0, fn sleeper_player_id, acc ->
         case Player.by_sleeper_id(sleeper_player_id) do
           {:ok, []} -> 
-            # Player doesn't exist in our system, skip for now
-            acc
-          {:ok, [player | _]} ->
-            roster_position = if sleeper_player_id in starters do
-              :Starter 
-            else 
-              :Bench
+            # Player doesn't exist, try to create from Sleeper API
+            case create_player_from_sleeper(sleeper_player_id) do
+              {:ok, player} -> add_player_to_roster(player, team.id, sleeper_player_id, starters, acc)
+              {:error, _} -> acc  # Skip if we can't create the player
             end
-            
-            case FantasyTeamPlayer.create(%{
-              fantasy_team_id: team.id,
-              player_id: player.id,
-              roster_position: roster_position,
-              acquisition_date: Date.utc_today(),
-              acquisition_type: :Draft
-            }) do
-              {:ok, _} -> acc + 1
-              {:error, _} -> acc
-            end
-          {:error, _} ->
-            acc
+          {:ok, [player | _]} -> add_player_to_roster(player, team.id, sleeper_player_id, starters, acc)
+          {:error, _} -> acc
         end
       end)
     
@@ -574,6 +560,39 @@ defmodule FantasyManager.Fantasy.League do
     # This would implement round-robin schedule generation
     # For now, return success with empty list
     {:ok, []}
+  end
+
+  defp create_player_from_sleeper(sleeper_player_id) do
+    # For now, we'll fetch all players and find the one we need
+    # This could be optimized with caching or a dedicated get_player API
+    case FantasyManager.External.SleeperClient.get_all_players() do
+      {:ok, all_players} ->
+        case Map.get(all_players, sleeper_player_id) do
+          nil -> {:error, :not_found}
+          player_data -> FantasyManager.Fantasy.Player.create_from_sleeper(player_data)
+        end
+      {:error, _} ->
+        {:error, :not_found}
+    end
+  end
+
+  defp add_player_to_roster(player, team_id, sleeper_player_id, starters, acc) do
+    roster_position = if sleeper_player_id in starters do
+      :Starter 
+    else 
+      :Bench
+    end
+    
+    case FantasyManager.Fantasy.FantasyTeamPlayer.create(%{
+      fantasy_team_id: team_id,
+      player_id: player.id,
+      roster_position: roster_position,
+      acquisition_date: Date.utc_today(),
+      acquisition_type: :Draft
+    }) do
+      {:ok, _} -> acc + 1
+      {:error, _} -> acc
+    end
   end
 end
 

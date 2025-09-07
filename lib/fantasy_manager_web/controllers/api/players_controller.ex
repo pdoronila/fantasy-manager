@@ -10,9 +10,16 @@ defmodule FantasyManagerWeb.Api.PlayersController do
     
     case Player.read(query_opts) do
       {:ok, players} ->
+        # Extract the actual player list for rendering
+        player_list = case players do
+          %Ash.Page.Offset{results: results} -> results
+          results when is_list(results) -> results
+          _ -> []
+        end
+        
         conn
         |> put_status(:ok)
-        |> render(:index, players: players, meta: build_meta(players, params))
+        |> render(:index, players: player_list, meta: build_meta(players, params))
 
       {:error, error} ->
         conn
@@ -136,15 +143,12 @@ defmodule FantasyManagerWeb.Api.PlayersController do
   defp build_query_opts(params) do
     opts = []
     
-    # Add pagination
+    # Add pagination using page with limit
     opts = if params["page"] do
       page_size = String.to_integer(params["page"]["size"] || "20")
-      page_number = String.to_integer(params["page"]["number"] || "1")
-      offset = (page_number - 1) * page_size
-      
-      Keyword.merge(opts, [limit: page_size, offset: offset])
+      Keyword.merge(opts, [page: [limit: page_size]])
     else
-      Keyword.merge(opts, [limit: 20])
+      Keyword.merge(opts, [page: [limit: 20]])
     end
 
     # Add sorting
@@ -159,7 +163,13 @@ defmodule FantasyManagerWeb.Api.PlayersController do
   end
 
   defp build_meta(players, params) do
-    count = length(players)
+    # Handle Ash pagination result
+    {count, results} = case players do
+      %Ash.Page.Offset{results: results, count: count} -> {count, results}
+      results when is_list(results) -> {length(results), results}
+      _ -> {0, []}
+    end
+    
     page_size = String.to_integer(params["page"]["size"] || "20")
     page_number = String.to_integer(params["page"]["number"] || "1")
 

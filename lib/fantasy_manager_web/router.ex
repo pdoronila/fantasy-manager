@@ -12,6 +12,11 @@ defmodule FantasyManagerWeb.Router do
 
   pipeline :api do
     plug :accepts, ["json"]
+    plug :fetch_session
+    
+    # Request logging for API calls
+    plug Plug.Logger, log: :info
+    
     # TODO: Add AshJsonApi.Plug once API is configured
     # plug AshJsonApi.Plug
   end
@@ -26,6 +31,15 @@ defmodule FantasyManagerWeb.Router do
     live "/dashboard/league/:id", DashboardLive, :league_detail
     live "/dashboard/league/:league_id/team/:team_id", DashboardLive, :team_detail
     live "/dashboard/recommendations", RecommendationsLive, :index
+  end
+
+  # Health check endpoint (no versioning needed)
+  scope "/health", FantasyManagerWeb do
+    pipe_through :api
+    
+    get "/", HealthController, :check
+    get "/ready", HealthController, :ready
+    get "/live", HealthController, :live
   end
 
   # API routes

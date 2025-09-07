@@ -74,9 +74,9 @@ defmodule FantasyManagerWeb.DashboardLive do
   end
 
   def handle_event("sync_league", %{"sleeper_id" => sleeper_id}, socket) do
-    socket = assign(socket, loading: true, sync_status: "Syncing league...")
+    socket = assign(socket, loading: true, sync_status: "Syncing league and rosters...")
 
-    case League.sync_from_sleeper(sleeper_id, false) do
+    case League.sync_from_sleeper(sleeper_id, true) do
       {:ok, _result} ->
         socket =
           socket
@@ -106,23 +106,45 @@ defmodule FantasyManagerWeb.DashboardLive do
 
     case FantasyManager.External.SleeperClient.get_all_players() do
       {:ok, players_data} ->
-        # Create players in batches to avoid timeout
-        player_count = 
+        # Create/update players in batches to avoid timeout
+        {created_count, updated_count, skipped_count, error_count} = 
           players_data
           |> Enum.take(100)  # Limit to first 100 for testing
-          |> Enum.reduce(0, fn {_sleeper_id, player_data}, acc ->
-            case Player.create_from_sleeper(player_data) do
-              {:ok, _} -> acc + 1
-              {:error, _} -> acc
+          |> Enum.reduce({0, 0, 0, 0}, fn {_sleeper_id, player_data}, {created, updated, skipped, errors} ->
+            case Player.upsert_from_sleeper(player_data) do
+              {:ok, {:created, _player}} -> 
+                {created + 1, updated, skipped, errors}
+              {:ok, {:updated, _player}} -> 
+                {created, updated + 1, skipped, errors}
+              {:ok, {:skipped, _reason}} -> 
+                # Skip non-fantasy-relevant players (CB, OL, etc.)
+                {created, updated, skipped + 1, errors}
+              {:error, _reason} -> 
+                {created, updated, skipped, errors + 1}
             end
           end)
 
+        total_processed = created_count + updated_count
+        status_message = cond do
+          error_count > 0 -> 
+            "Processed #{total_processed} players (#{created_count} created, #{updated_count} updated, #{skipped_count} skipped, #{error_count} errors)"
+          skipped_count > 0 and updated_count > 0 -> 
+            "Successfully synced #{total_processed} fantasy players (#{created_count} new, #{updated_count} updated, #{skipped_count} non-fantasy players skipped)!"
+          skipped_count > 0 -> 
+            "Successfully synced #{created_count} new fantasy players (#{skipped_count} non-fantasy players skipped)!"
+          updated_count > 0 -> 
+            "Successfully synced #{total_processed} players (#{created_count} new, #{updated_count} updated)!"
+          true -> 
+            "Successfully synced #{created_count} new players!"
+        end
+
         socket
         |> assign(:loading, false)
-        |> assign(:sync_status, "Successfully synced #{player_count} players!")
+        |> assign(:sync_status, status_message)
         |> assign(:error_message, nil)
 
-      {:error, _error} ->
+      {:error, error} ->
+        IO.puts("Failed to fetch players from Sleeper API: #{inspect(error)}")
         socket
         |> assign(:loading, false)
         |> assign(:sync_status, nil)
