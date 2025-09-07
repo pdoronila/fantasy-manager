@@ -24,6 +24,7 @@ defmodule FantasyManagerWeb.Router do
     # Fantasy Manager LiveViews
     live "/dashboard", DashboardLive, :index
     live "/dashboard/league/:id", DashboardLive, :league_detail
+    live "/dashboard/league/:league_id/team/:team_id", DashboardLive, :team_detail
     live "/dashboard/recommendations", RecommendationsLive, :index
   end
 

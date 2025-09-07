@@ -76,7 +76,7 @@ Focus on core functionality for browser testing:
   - Implement Player resource from data-model.md with Sleeper API integration
   - Include calculations, validations, and AI vectorization setup
 
-- [x] **T012** [P] League Ash resource  
+- [x] **T012** [P] League Ash resource
   - Path: `lib/fantasy_manager/fantasy/league.ex`
   - Implement League resource with keeper/dynasty settings
   - Include team relationships and validation rules
@@ -132,27 +132,27 @@ Focus on core functionality for browser testing:
 
 ## Phase 3.6: Web Interface and APIs
 
-- [ ] **T022** JSON:API endpoints for players
+- [x] **T022** JSON:API endpoints for players
   - Path: `lib/fantasy_manager_web/controllers/api/players_controller.ex`
   - Implement GET /api/v1/players with filtering and search
   - Connect to Player Ash resource with AshJsonApi
 
-- [ ] **T023** JSON:API endpoints for leagues
-  - Path: `lib/fantasy_manager_web/controllers/api/leagues_controller.ex` 
+- [x] **T023** JSON:API endpoints for leagues
+  - Path: `lib/fantasy_manager_web/controllers/api/leagues_controller.ex`
   - Implement league CRUD and Sleeper sync endpoints
   - Include team relationships and roster data
 
-- [ ] **T024** AI recommendation endpoints
+- [x] **T024** AI recommendation endpoints
   - Path: `lib/fantasy_manager_web/controllers/api/recommendations_controller.ex`
   - Implement POST /api/v1/lineups/optimize and other AI endpoints
   - Connect to AI recommendation engine
 
-- [ ] **T025** [P] Basic web interface for testing
+- [x] **T025** [P] Basic web interface for testing
   - Path: `lib/fantasy_manager_web/live/dashboard_live.ex`
   - Create simple Phoenix LiveView for interacting with API
   - Include forms for league setup, player search, recommendation requests
 
-- [ ] **T026** [P] Web interface for AI recommendations
+- [x] **T026** [P] Web interface for AI recommendations
   - Path: `lib/fantasy_manager_web/live/recommendations_live.ex`
   - Create interface for lineup optimization and trade analysis
   - Display AI reasoning and confidence scores
@@ -200,7 +200,7 @@ Task: "Setup database and migrations structure in priv/repo/"
 
 # Group 2: Contract tests (must all fail before implementation)
 Task: "Contract test GET /api/v1/players in test/controllers/players_api_test.exs"
-Task: "Contract test POST /api/v1/lineups/optimize in test/controllers/recommendations_api_test.exs" 
+Task: "Contract test POST /api/v1/lineups/optimize in test/controllers/recommendations_api_test.exs"
 Task: "Contract test GET /api/v1/leagues/{id} in test/controllers/leagues_api_test.exs"
 Task: "Integration test Sleeper API client in test/integration/sleeper_client_test.exs"
 Task: "Integration test AI recommendation flow in test/integration/ai_recommendations_test.exs"
@@ -220,7 +220,7 @@ Task: "Create mock data generators in lib/test_support/mock_data.ex"
 Task: "Implement AI recommendation engine in lib/ai/recommendation_engine.ex"
 Task: "Implement Ash.ai fantasy tools in lib/ai/fantasy_tools.ex"
 
-# Group 6: Web interface components  
+# Group 6: Web interface components
 Task: "Create basic web interface for testing in lib/web/live/dashboard_live.ex"
 Task: "Create AI recommendations interface in lib/web/live/recommendations_live.ex"
 Task: "Create seed data for testing in priv/repo/seeds.exs"

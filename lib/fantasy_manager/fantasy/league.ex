@@ -494,10 +494,80 @@ defmodule FantasyManager.Fantasy.League do
   end
 
   defp sync_team_rosters(league, rosters) do
-    # This would implement the actual roster synchronization logic
-    # For now, return placeholder counts
-    total_players = rosters |> Enum.flat_map(&(Map.get(&1, "players", []))) |> length()
-    {total_players, length(rosters)}
+    # Load existing teams for this league
+    {:ok, teams} = FantasyTeam.by_league(league.id)
+    
+    players_synced = 0
+    rosters_synced = 0
+    
+    {players_synced, rosters_synced} = 
+      Enum.reduce(rosters, {0, 0}, fn roster_data, {players_acc, rosters_acc} ->
+        roster_id = to_string(roster_data["roster_id"])
+        
+        # Find the team with this sleeper_id
+        case Enum.find(teams, &(&1.sleeper_id == roster_id)) do
+          nil -> 
+            {players_acc, rosters_acc}
+          team ->
+            case sync_single_team_roster(team, roster_data) do
+              {:ok, %{players_added: added}} -> 
+                {players_acc + added, rosters_acc + 1}
+              {:error, _} -> 
+                {players_acc, rosters_acc}
+            end
+        end
+      end)
+    
+    {players_synced, rosters_synced}
+  end
+  
+  defp sync_single_team_roster(team, roster_data) do
+    alias FantasyManager.Fantasy.{Player, FantasyTeamPlayer}
+    
+    # Get player IDs from the roster
+    player_ids = roster_data["players"] || []
+    starters = roster_data["starters"] || []
+    
+    # Clear existing roster
+    {:ok, existing_players} = FantasyTeamPlayer.by_team(team.id)
+    for existing <- existing_players do
+      FantasyTeamPlayer.destroy!(existing)
+    end
+    
+    # Add current roster players
+    players_added = 
+      player_ids
+      |> Enum.reduce(0, fn sleeper_player_id, acc ->
+        case Player.by_sleeper_id(sleeper_player_id) do
+          {:ok, []} -> 
+            # Player doesn't exist in our system, skip for now
+            acc
+          {:ok, [player | _]} ->
+            roster_position = if sleeper_player_id in starters do
+              :Starter 
+            else 
+              :Bench
+            end
+            
+            case FantasyTeamPlayer.create(%{
+              fantasy_team_id: team.id,
+              player_id: player.id,
+              roster_position: roster_position,
+              acquisition_date: Date.utc_today(),
+              acquisition_type: :Draft
+            }) do
+              {:ok, _} -> acc + 1
+              {:error, _} -> acc
+            end
+          {:error, _} ->
+            acc
+        end
+      end)
+    
+    {:ok, %{players_added: players_added, players_removed: length(existing_players)}}
+  rescue 
+    error ->
+      {:error, error}
   end
 
   defp generate_matchup_schedule(league, season) do

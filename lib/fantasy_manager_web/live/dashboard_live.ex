@@ -13,6 +13,7 @@ defmodule FantasyManagerWeb.DashboardLive do
       |> assign(:players, [])
       |> assign(:search_query, "")
       |> assign(:selected_league, nil)
+      |> assign(:selected_team, nil)
       |> assign(:sync_status, nil)
       |> assign(:loading, false)
       |> assign(:error_message, nil)
@@ -36,11 +37,27 @@ defmodule FantasyManagerWeb.DashboardLive do
       {:ok, league} ->
         socket
         |> assign(:selected_league, league)
+        |> assign(:selected_team, nil)
         |> assign(:page_title, "League: #{league.name}")
         
       {:error, _} ->
         socket
         |> assign(:error_message, "League not found")
+        |> push_navigate(to: ~p"/dashboard")
+    end
+  end
+
+  defp apply_action(socket, :team_detail, %{"league_id" => league_id, "team_id" => team_id}) do
+    with {:ok, league} <- Ash.get(League, league_id, load: [:fantasy_teams]),
+         {:ok, team} <- Ash.get(FantasyTeam, team_id, load: [fantasy_team_players: [:player]]) do
+      socket
+      |> assign(:selected_league, league)
+      |> assign(:selected_team, team)
+      |> assign(:page_title, "Team: #{team.name}")
+    else
+      {:error, _} ->
+        socket
+        |> assign(:error_message, "Team or League not found")
         |> push_navigate(to: ~p"/dashboard")
     end
   end
@@ -82,6 +99,36 @@ defmodule FantasyManagerWeb.DashboardLive do
 
         {:noreply, socket}
     end
+  end
+
+  def handle_event("sync_players", _params, socket) do
+    socket = assign(socket, loading: true, sync_status: "Syncing players from Sleeper...")
+
+    case FantasyManager.External.SleeperClient.get_all_players() do
+      {:ok, players_data} ->
+        # Create players in batches to avoid timeout
+        player_count = 
+          players_data
+          |> Enum.take(100)  # Limit to first 100 for testing
+          |> Enum.reduce(0, fn {_sleeper_id, player_data}, acc ->
+            case Player.create_from_sleeper(player_data) do
+              {:ok, _} -> acc + 1
+              {:error, _} -> acc
+            end
+          end)
+
+        socket
+        |> assign(:loading, false)
+        |> assign(:sync_status, "Successfully synced #{player_count} players!")
+        |> assign(:error_message, nil)
+
+      {:error, _error} ->
+        socket
+        |> assign(:loading, false)
+        |> assign(:sync_status, nil)
+        |> assign(:error_message, "Failed to sync players from Sleeper")
+    end
+    |> then(fn socket -> {:noreply, socket} end)
   end
 
   def handle_event("sync_teams_and_rosters", %{"sleeper_id" => sleeper_id}, socket) do
@@ -179,7 +226,13 @@ defmodule FantasyManagerWeb.DashboardLive do
 
         <%= if @live_action == :league_detail and @selected_league do %>
           <%= render_league_detail(assigns) %>
-        <% else %>
+        <% end %>
+        
+        <%= if @live_action == :team_detail and @selected_team do %>
+          <%= render_team_detail(assigns) %>
+        <% end %>
+        
+        <%= if @live_action == :index do %>
           <%= render_dashboard(assigns) %>
         <% end %>
       </div>
@@ -218,6 +271,21 @@ defmodule FantasyManagerWeb.DashboardLive do
               </form>
               <p class="mt-2 text-sm text-base-content opacity-70">
                 Enter your Sleeper league ID to import league data and teams.
+              </p>
+            </div>
+
+            <!-- Sync Players -->
+            <div class="mb-6">
+              <h4 class="text-md font-medium text-base-content mb-2">Player Database</h4>
+              <button
+                phx-click="sync_players"
+                class="btn btn-secondary"
+                disabled={@loading}
+              >
+                <%= if @loading, do: "Syncing...", else: "Sync Players from Sleeper" %>
+              </button>
+              <p class="mt-2 text-sm text-base-content opacity-70">
+                Populate the player database from Sleeper. Do this before syncing team rosters.
               </p>
             </div>
 
@@ -417,6 +485,12 @@ defmodule FantasyManagerWeb.DashboardLive do
                             $<%= team.faab_budget %> FAAB
                           </p>
                         <% end %>
+                        <.link 
+                          navigate={~p"/dashboard/league/#{@selected_league.id}/team/#{team.id}"} 
+                          class="btn btn-sm btn-primary mt-2"
+                        >
+                          View Roster
+                        </.link>
                       </div>
                     </div>
                   </div>
@@ -515,5 +589,215 @@ defmodule FantasyManagerWeb.DashboardLive do
     socket
     |> assign(:players, [])
     |> assign(:loading, false)
+  end
+
+  # Render team detail view with roster
+  defp render_team_detail(assigns) do
+    ~H"""
+    <div class="mb-8">
+      <!-- Breadcrumb -->
+      <nav class="breadcrumbs text-sm text-base-content opacity-70 mb-4">
+        <ul>
+          <li>
+            <.link navigate={~p"/dashboard"}>Dashboard</.link>
+          </li>
+          <li>
+            <.link navigate={~p"/dashboard/league/#{@selected_league.id}"}>
+              <%= @selected_league.name %>
+            </.link>
+          </li>
+          <li>
+            <%= @selected_team.name %>
+          </li>
+        </ul>
+      </nav>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-8">
+      <!-- Team Info Sidebar -->
+      <div class="lg:col-span-1">
+        <div class="card bg-base-100 shadow-xl sticky top-4">
+          <div class="card-body">
+            <h2 class="card-title text-xl text-base-content mb-4">
+              <%= @selected_team.name %>
+            </h2>
+            
+            <div class="space-y-3">
+              <div>
+                <p class="text-sm text-base-content opacity-70">Owner</p>
+                <p class="font-medium text-base-content"><%= @selected_team.owner_name %></p>
+              </div>
+              
+              <%= if @selected_team.wins || @selected_team.losses do %>
+                <div>
+                  <p class="text-sm text-base-content opacity-70">Record</p>
+                  <p class="font-medium text-base-content">
+                    <%= @selected_team.wins || 0 %>-<%= @selected_team.losses || 0 %>-<%= @selected_team.ties || 0 %>
+                  </p>
+                </div>
+              <% end %>
+              
+              <%= if @selected_team.points_for do %>
+                <div>
+                  <p class="text-sm text-base-content opacity-70">Points For</p>
+                  <p class="font-medium text-primary">
+                    <%= @selected_team.points_for |> Decimal.to_float() |> Float.round(1) %>
+                  </p>
+                </div>
+              <% end %>
+              
+              <%= if @selected_team.points_against do %>
+                <div>
+                  <p class="text-sm text-base-content opacity-70">Points Against</p>
+                  <p class="font-medium text-base-content">
+                    <%= @selected_team.points_against |> Decimal.to_float() |> Float.round(1) %>
+                  </p>
+                </div>
+              <% end %>
+              
+              <div>
+                <p class="text-sm text-base-content opacity-70">FAAB Budget</p>
+                <p class="font-medium text-base-content">$<%= @selected_team.faab_budget %></p>
+              </div>
+              
+              <div>
+                <p class="text-sm text-base-content opacity-70">Total Moves</p>
+                <p class="font-medium text-base-content"><%= @selected_team.total_moves %></p>
+              </div>
+              
+              <div>
+                <p class="text-sm text-base-content opacity-70">Competitive Window</p>
+                <span class={[
+                  "badge",
+                  case @selected_team.competitive_window do
+                    :Contending -> "badge-success"
+                    :Rebuilding -> "badge-warning"
+                    :Neutral -> "badge-neutral"
+                    _ -> "badge-neutral"
+                  end
+                ]}>
+                  <%= @selected_team.competitive_window %>
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Roster -->
+      <div class="lg:col-span-3">
+        <div class="card bg-base-100 shadow-xl">
+          <div class="card-body">
+            <h3 class="card-title text-2xl text-base-content mb-6">Roster</h3>
+            
+            <%= if length(@selected_team.fantasy_team_players) > 0 do %>
+              <!-- Starters Section -->
+              <div class="mb-8">
+                <h4 class="text-lg font-semibold text-base-content mb-4 flex items-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                  </svg>
+                  Starting Lineup
+                </h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <%= for team_player <- Enum.filter(@selected_team.fantasy_team_players, &(&1.roster_position == :Starter)) do %>
+                    <div class="card bg-primary text-primary-content border-2 border-primary">
+                      <div class="card-body p-4">
+                        <div class="flex justify-between items-start">
+                          <div>
+                            <h5 class="font-bold text-lg"><%= team_player.player.name %></h5>
+                            <p class="opacity-80"><%= team_player.player.position %> - <%= team_player.player.nfl_team || "FA" %></p>
+                            <%= if team_player.lineup_position do %>
+                              <span class="badge badge-secondary badge-sm mt-1"><%= team_player.lineup_position %></span>
+                            <% end %>
+                          </div>
+                          <div class="text-right">
+                            <%= if team_player.player.dynasty_value do %>
+                              <p class="text-sm opacity-80">
+                                Dynasty: <%= Float.round(Decimal.to_float(team_player.player.dynasty_value), 1) %>
+                              </p>
+                            <% end %>
+                            <p class="text-xs opacity-70 mt-1">
+                              <%= String.capitalize(to_string(team_player.acquisition_type)) %>
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  <% end %>
+                </div>
+              </div>
+
+              <!-- Bench Section -->
+              <div class="mb-8">
+                <h4 class="text-lg font-semibold text-base-content mb-4 flex items-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                  Bench
+                </h4>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <%= for team_player <- Enum.filter(@selected_team.fantasy_team_players, &(&1.roster_position == :Bench)) do %>
+                    <div class="card bg-base-200 border border-base-300">
+                      <div class="card-body p-4">
+                        <div class="flex justify-between items-start">
+                          <div>
+                            <h5 class="font-semibold text-base-content"><%= team_player.player.name %></h5>
+                            <p class="text-sm text-base-content opacity-70"><%= team_player.player.position %> - <%= team_player.player.nfl_team || "FA" %></p>
+                          </div>
+                          <div class="text-right">
+                            <%= if team_player.player.dynasty_value do %>
+                              <p class="text-xs text-base-content opacity-50">
+                                Dynasty: <%= Float.round(Decimal.to_float(team_player.player.dynasty_value), 1) %>
+                              </p>
+                            <% end %>
+                          </div>
+                        </div>
+                        <p class="text-xs text-base-content opacity-50 mt-2">
+                          <%= String.capitalize(to_string(team_player.acquisition_type)) %>
+                        </p>
+                      </div>
+                    </div>
+                  <% end %>
+                </div>
+              </div>
+
+              <!-- Other Positions (IR, Taxi) -->
+              <%= if Enum.any?(@selected_team.fantasy_team_players, &(&1.roster_position not in [:Starter, :Bench])) do %>
+                <div class="mb-8">
+                  <h4 class="text-lg font-semibold text-base-content mb-4">Other</h4>
+                  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <%= for team_player <- Enum.filter(@selected_team.fantasy_team_players, &(&1.roster_position not in [:Starter, :Bench])) do %>
+                      <div class="card bg-warning text-warning-content">
+                        <div class="card-body p-4">
+                          <div class="flex justify-between items-start">
+                            <div>
+                              <h5 class="font-semibold"><%= team_player.player.name %></h5>
+                              <p class="opacity-80 text-sm"><%= team_player.player.position %> - <%= team_player.player.nfl_team || "FA" %></p>
+                            </div>
+                            <span class="badge badge-neutral badge-sm">
+                              <%= team_player.roster_position %>
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    <% end %>
+                  </div>
+                </div>
+              <% end %>
+
+            <% else %>
+              <div class="text-center py-8">
+                <p class="text-base-content opacity-70">No roster data available</p>
+                <p class="text-sm text-base-content opacity-50 mt-2">
+                  Try syncing the team data from Sleeper
+                </p>
+              </div>
+            <% end %>
+          </div>
+        </div>
+      </div>
+    </div>
+    """
   end
 end

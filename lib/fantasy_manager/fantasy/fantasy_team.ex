@@ -94,6 +94,17 @@ defmodule FantasyManager.Fantasy.FantasyTeam do
       source_attribute :league_id
       destination_attribute :id
     end
+
+    has_many :fantasy_team_players, FantasyManager.Fantasy.FantasyTeamPlayer do
+      source_attribute :id
+      destination_attribute :fantasy_team_id
+    end
+
+    many_to_many :roster_players, FantasyManager.Fantasy.Player do
+      through FantasyManager.Fantasy.FantasyTeamPlayer
+      source_attribute_on_join_resource :fantasy_team_id
+      destination_attribute_on_join_resource :player_id
+    end
   end
 
   calculations do
@@ -279,6 +290,12 @@ defmodule FantasyManager.Fantasy.FantasyTeam do
       filter expr(league_id == ^arg(:league_id))
     end
 
+    read :by_league do
+      argument :league_id, :uuid, allow_nil?: false
+
+      filter expr(league_id == ^arg(:league_id))
+    end
+
     read :search_teams do
       argument :query, :string, allow_nil?: false
 
@@ -340,6 +357,7 @@ defmodule FantasyManager.Fantasy.FantasyTeam do
     define :by_competitive_window, args: [:window]
     define :playoff_contenders, args: [:league_id]
     define :standings, args: [:league_id]
+    define :by_league, args: [:league_id]
     define :search_teams, args: [:query]
     define :analyze_team_needs
   end
@@ -439,10 +457,53 @@ defmodule FantasyManager.Fantasy.FantasyTeam do
     ]
   end
 
-  defp sync_roster_players(_team, _roster_data) do
-    # This would sync the actual roster players
-    # For now, return success with placeholder counts
-    {:ok, %{players_added: 5, players_updated: 10, players_removed: 0}}
+  defp sync_roster_players(team, roster_data) do
+    alias FantasyManager.Fantasy.{Player, FantasyTeamPlayer}
+    
+    # Get player IDs from the roster
+    player_ids = roster_data["players"] || []
+    starters = roster_data["starters"] || []
+    
+    # Clear existing roster  
+    {:ok, existing_players} = FantasyTeamPlayer.by_team(team.id)
+    for existing <- existing_players do
+      FantasyTeamPlayer.destroy!(existing)
+    end
+    
+    players_added = 0
+    
+    # Add current roster players
+    players_added = 
+      player_ids
+      |> Enum.reduce(0, fn sleeper_player_id, acc ->
+        case Player.by_sleeper_id(sleeper_player_id) do
+          {:ok, []} -> 
+            # Player doesn't exist in our system, skip for now
+            acc
+          {:ok, [player | _]} ->
+            roster_position = if sleeper_player_id in starters do
+              :Starter 
+            else 
+              :Bench
+            end
+            
+            case FantasyTeamPlayer.create(%{
+              fantasy_team_id: team.id,
+              player_id: player.id,
+              roster_position: roster_position,
+              acquisition_date: Date.utc_today(),
+              acquisition_type: :Draft
+            }) do
+              {:ok, _} -> acc + 1
+              {:error, _} -> acc
+            end
+        end
+      end)
+    
+    {:ok, %{players_added: players_added, players_updated: 0, players_removed: length(existing_players)}}
+  rescue 
+    error ->
+      {:error, error}
   end
 end
 

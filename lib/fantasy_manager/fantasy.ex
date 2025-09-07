@@ -12,6 +12,7 @@ defmodule FantasyManager.Fantasy do
     resource FantasyManager.Fantasy.Player
     resource FantasyManager.Fantasy.League
     resource FantasyManager.Fantasy.FantasyTeam
+    resource FantasyManager.Fantasy.FantasyTeamPlayer
     resource FantasyManager.Fantasy.WeeklyProjection
   end
 end
