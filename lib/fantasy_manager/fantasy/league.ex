@@ -3,6 +3,9 @@ defmodule FantasyManager.Fantasy.League do
     domain: FantasyManager.Fantasy,
     data_layer: AshPostgres.DataLayer
 
+  require Ash.Query
+  alias FantasyManager.Fantasy.FantasyTeam
+
   postgres do
     table "leagues"
     repo FantasyManager.Repo
@@ -169,14 +172,14 @@ defmodule FantasyManager.Fantasy.League do
   end
 
   changes do
-    change after_action(:sync_teams_from_sleeper) do
+    change after_action(&sync_teams_from_sleeper/3) do
       on [:create]
     end
 
-    change before_action(:set_default_scoring_settings),
+    change before_action(&set_default_scoring_settings/2),
       on: [:create]
 
-    change before_action(:validate_keeper_settings),
+    change before_action(&validate_keeper_settings/2),
       on: [:create, :update]
   end
 
@@ -185,7 +188,6 @@ defmodule FantasyManager.Fantasy.League do
 
     create :create_from_sleeper do
       argument :sleeper_data, :map, allow_nil?: false
-      argument :sync_teams, :boolean, allow_nil?: true, default: true
       
       change fn changeset, context ->
         sleeper_data = Ash.Changeset.get_argument(changeset, :sleeper_data)
@@ -252,16 +254,37 @@ defmodule FantasyManager.Fantasy.League do
         sleeper_id = input.arguments.sleeper_id
         full_sync = input.arguments.full_sync
         
+        IO.puts("=== sync_from_sleeper called with sleeper_id: #{sleeper_id}, full_sync: #{full_sync} ===")
+        
         case FantasyManager.External.SleeperClient.get_league(sleeper_id) do
           {:ok, league_data} ->
-            # For now, always create new leagues - in production this would check for existing ones
-            {:ok, league} = __MODULE__.create_from_sleeper!(league_data, sync_teams: true, authorize?: false)
-            sync_result = if full_sync do
-              sync_teams_and_rosters(league)
-            else
-              sync_teams_only(league)
+            season = String.to_integer(league_data["season"])
+            
+            # Check if league already exists
+            case Ash.Query.filter(__MODULE__, sleeper_id == ^sleeper_id and season == ^season) |> Ash.read_one() do
+              {:ok, existing_league} when not is_nil(existing_league) ->
+                # League exists, just sync teams
+                sync_result = if full_sync do
+                  sync_teams_and_rosters(existing_league)
+                else
+                  sync_teams_only(existing_league)
+                end
+                {:ok, Map.merge(%{status: "updated", league_id: existing_league.id}, sync_result)}
+                
+              {:ok, nil} ->
+                # League doesn't exist, create it
+                {:ok, league} = __MODULE__.create_from_sleeper!(league_data, authorize?: false)
+                sync_result = if full_sync do
+                  sync_teams_and_rosters(league)
+                else
+                  sync_teams_only(league)
+                end
+                {:ok, Map.merge(%{status: "created", league_id: league.id}, sync_result)}
+                
+              {:error, reason} ->
+                {:error, %{error: "Failed to check for existing league", reason: reason}}
             end
-            {:ok, Map.merge(%{status: "created", league_id: league.id}, sync_result)}
+            
           {:error, reason} ->
             {:error, %{error: "Failed to sync from Sleeper", reason: reason}}
         end
@@ -293,7 +316,7 @@ defmodule FantasyManager.Fantasy.League do
     define :read
     define :update
     define :destroy
-    define :create_from_sleeper, args: [:sleeper_data, :sync_teams]
+    define :create_from_sleeper, args: [:sleeper_data]
     define :update_keeper_settings, args: [:keeper_count, :dynasty_transition_year]
     define :update_trade_deadline, args: [:deadline_week]
     define :by_season, args: [:season]
@@ -337,14 +360,13 @@ defmodule FantasyManager.Fantasy.League do
   end
   defp get_roster_size(_), do: 16
 
-  defp sync_teams_from_sleeper(changeset, league) do
-    if Ash.Changeset.get_argument(changeset, :sync_teams, true) do
-      sync_teams_only(league)
-    end
-    changeset
+  defp sync_teams_from_sleeper(changeset, league, _context) do
+    # Always sync teams when creating from sleeper
+    sync_teams_only(league)
+    {:ok, league}
   end
 
-  defp set_default_scoring_settings(changeset) do
+  defp set_default_scoring_settings(changeset, _context) do
     scoring_format = Ash.Changeset.get_attribute(changeset, :scoring_format)
     
     default_settings = case scoring_format do
@@ -361,7 +383,7 @@ defmodule FantasyManager.Fantasy.League do
     Ash.Changeset.change_attribute(changeset, :scoring_settings, merged_settings)
   end
 
-  defp validate_keeper_settings(changeset) do
+  defp validate_keeper_settings(changeset, _context) do
     league_type = Ash.Changeset.get_attribute(changeset, :league_type)
     keeper_count = Ash.Changeset.get_attribute(changeset, :keeper_count)
     roster_size = Ash.Changeset.get_attribute(changeset, :roster_size)
@@ -379,16 +401,24 @@ defmodule FantasyManager.Fantasy.League do
   end
 
   defp sync_teams_only(league) do
+    IO.puts("=== Starting sync_teams_only for league: #{league.name} (#{league.sleeper_id}) ===")
+    
     case FantasyManager.External.SleeperClient.get_league_users(league.sleeper_id) do
       {:ok, users} ->
+        IO.puts("Successfully fetched #{length(users)} users from Sleeper")
         case FantasyManager.External.SleeperClient.get_league_rosters(league.sleeper_id) do
           {:ok, rosters} ->
+            IO.puts("Successfully fetched #{length(rosters)} rosters from Sleeper")
             teams_synced = sync_fantasy_teams(league, users, rosters)
-            %{teams_updated: teams_synced, players_updated: 0, rosters_synced: 0}
-          {:error, _} ->
+            result = %{teams_updated: teams_synced, players_updated: 0, rosters_synced: 0}
+            IO.puts("Sync completed. Result: #{inspect(result)}")
+            result
+          {:error, error} ->
+            IO.puts("Failed to fetch rosters: #{inspect(error)}")
             %{teams_updated: 0, players_updated: 0, rosters_synced: 0}
         end
-      {:error, _} ->
+      {:error, error} ->
+        IO.puts("Failed to fetch users: #{inspect(error)}")
         %{teams_updated: 0, players_updated: 0, rosters_synced: 0}
     end
   end
@@ -410,9 +440,57 @@ defmodule FantasyManager.Fantasy.League do
   end
 
   defp sync_fantasy_teams(league, users, rosters) do
-    # This would implement the actual team synchronization logic
-    # For now, return a placeholder count
-    length(users)
+    # Create a map of user_id to user data for easy lookup
+    user_map = users |> Enum.reduce(%{}, fn user, acc -> Map.put(acc, user["user_id"], user) end)
+    
+    # Sync each roster as a fantasy team
+    teams_synced = Enum.reduce(rosters, 0, fn roster, acc ->
+      user_id = roster["owner_id"]
+      user_data = Map.get(user_map, user_id, %{})
+      
+      # Check if team already exists
+      roster_id_string = to_string(roster["roster_id"])
+      case Ash.Query.filter(FantasyTeam, sleeper_id == ^roster_id_string and league_id == ^league.id) 
+           |> Ash.read_one() do
+        {:ok, nil} ->
+          # Team doesn't exist, create it
+          case create_fantasy_team_from_sleeper(roster, user_data, league.id) do
+            {:ok, _team} -> acc + 1
+            {:error, _} -> acc
+          end
+        {:ok, _existing_team} ->
+          # Team exists, could update it here in the future
+          acc
+        {:error, _} -> acc
+      end
+    end)
+    
+    teams_synced
+  end
+  
+  defp create_fantasy_team_from_sleeper(roster_data, user_data, league_id) do
+    # Debug logging
+    IO.puts("Creating team from Sleeper data:")
+    IO.inspect(roster_data, label: "Roster Data")
+    IO.inspect(user_data, label: "User Data")
+    IO.puts("League ID: #{league_id}")
+    
+    result = FantasyTeam.create_from_sleeper(
+      roster_data,
+      user_data,
+      league_id,
+      authorize?: false
+    )
+    
+    case result do
+      {:ok, team} -> 
+        IO.puts("Successfully created team: #{team.name}")
+        {:ok, team}
+      {:error, error} -> 
+        IO.puts("Failed to create team:")
+        IO.inspect(error)
+        {:error, error}
+    end
   end
 
   defp sync_team_rosters(league, rosters) do

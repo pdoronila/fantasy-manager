@@ -178,14 +178,14 @@ defmodule FantasyManager.Fantasy.FantasyTeam do
   end
 
   changes do
-    change after_action(:sync_roster_from_sleeper) do
+    change after_action(&sync_roster_from_sleeper/3) do
       on [:create]
     end
 
-    change before_action(:calculate_competitive_window),
+    change before_action(&calculate_competitive_window/2),
       on: [:create, :update]
 
-    change after_action(:update_league_standings),
+    change after_action(&update_league_standings/3),
       on: [:update]
   end
 
@@ -203,7 +203,7 @@ defmodule FantasyManager.Fantasy.FantasyTeam do
         league_id = Ash.Changeset.get_argument(changeset, :league_id)
         
         changeset
-        |> Ash.Changeset.change_attribute(:sleeper_id, sleeper_data["roster_id"])
+        |> Ash.Changeset.change_attribute(:sleeper_id, to_string(sleeper_data["roster_id"]))
         |> Ash.Changeset.change_attribute(:name, user_data["display_name"] || user_data["username"])
         |> Ash.Changeset.change_attribute(:owner_name, user_data["display_name"] || user_data["username"])
         |> Ash.Changeset.change_attribute(:league_id, league_id)
@@ -349,10 +349,13 @@ defmodule FantasyManager.Fantasy.FantasyTeam do
   end
 
   # Helper functions
-  defp sync_roster_from_sleeper(changeset, team) do
+  defp sync_roster_from_sleeper(changeset, team, _context) do
     sleeper_id = team.sleeper_id
     
-    case FantasyManager.External.SleeperClient.get_league_rosters(team.league.sleeper_id) do
+    # Load the league relationship to access sleeper_id
+    team_with_league = team |> Ash.load!(:league)
+    
+    case FantasyManager.External.SleeperClient.get_league_rosters(team_with_league.league.sleeper_id) do
       {:ok, rosters} ->
         team_roster = Enum.find(rosters, &(&1["roster_id"] == sleeper_id))
         if team_roster do
@@ -363,10 +366,10 @@ defmodule FantasyManager.Fantasy.FantasyTeam do
         :ok
     end
     
-    changeset
+    {:ok, team}
   end
 
-  defp calculate_competitive_window(changeset) do
+  defp calculate_competitive_window(changeset, _context) do
     wins = Ash.Changeset.get_attribute(changeset, :wins)
     losses = Ash.Changeset.get_attribute(changeset, :losses)
     points_for = Ash.Changeset.get_attribute(changeset, :points_for)
@@ -387,10 +390,10 @@ defmodule FantasyManager.Fantasy.FantasyTeam do
     end
   end
 
-  defp update_league_standings(changeset, _team) do
+  defp update_league_standings(changeset, team, _context) do
     # This would trigger a background job to recalculate league standings
-    # For now, just return the changeset
-    changeset
+    # For now, just return the team
+    {:ok, team}
   end
 
   defp analyze_roster_composition(_team) do

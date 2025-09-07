@@ -60,13 +60,50 @@ defmodule FantasyManagerWeb.DashboardLive do
     socket = assign(socket, loading: true, sync_status: "Syncing league...")
 
     case League.sync_from_sleeper(sleeper_id, false) do
-      {:ok, result} ->
+      {:ok, _result} ->
         socket =
           socket
           |> assign(:loading, false)
           |> assign(:sync_status, "Sync completed successfully!")
           |> assign(:error_message, nil)
           |> load_leagues()
+
+        # Clear sync status after 3 seconds
+        Process.send_after(self(), :clear_sync_status, 3000)
+
+        {:noreply, socket}
+
+      {:error, error} ->
+        socket =
+          socket
+          |> assign(:loading, false)
+          |> assign(:sync_status, nil)
+          |> assign(:error_message, "Sync failed: #{inspect(error)}")
+
+        {:noreply, socket}
+    end
+  end
+
+  def handle_event("sync_teams_and_rosters", %{"sleeper_id" => sleeper_id}, socket) do
+    socket = assign(socket, loading: true, sync_status: "Syncing teams and rosters...")
+
+    case League.sync_from_sleeper(sleeper_id, true) do
+      {:ok, _result} ->
+        # Reload the selected league with updated team data
+        updated_socket = case socket.assigns.selected_league do
+          nil -> socket
+          league -> 
+            case Ash.get(League, league.id, load: [:fantasy_teams]) do
+              {:ok, updated_league} -> assign(socket, :selected_league, updated_league)
+              {:error, _} -> socket
+            end
+        end
+
+        socket =
+          updated_socket
+          |> assign(:loading, false)
+          |> assign(:sync_status, "Teams and rosters synced successfully!")
+          |> assign(:error_message, nil)
 
         # Clear sync status after 3 seconds
         Process.send_after(self(), :clear_sync_status, 3000)
@@ -140,163 +177,304 @@ defmodule FantasyManagerWeb.DashboardLive do
           </div>
         <% end %>
 
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <!-- League Management Panel -->
-          <div class="lg:col-span-2">
-            <div class="card bg-base-100 shadow-xl">
-              <div class="card-body">
-                <h3 class="card-title text-base-content mb-4">League Management</h3>
-                
-                <!-- Sync from Sleeper Form -->
-                <div class="mb-6">
-                  <h4 class="text-md font-medium text-base-content mb-2">Sync League from Sleeper</h4>
-                  <form phx-submit="sync_league" class="flex space-x-2">
-                    <input
-                      type="text"
-                      name="sleeper_id"
-                      placeholder="Enter Sleeper League ID"
-                      class="input input-bordered flex-1"
-                      required
-                    />
-                    <button
-                      type="submit"
-                      class="btn btn-primary"
-                      disabled={@loading}
-                    >
-                      <%= if @loading, do: "Syncing...", else: "Sync League" %>
-                    </button>
-                  </form>
-                  <p class="mt-2 text-sm text-base-content opacity-70">
-                    Enter your Sleeper league ID to import league data and teams.
-                  </p>
-                </div>
+        <%= if @live_action == :league_detail and @selected_league do %>
+          <%= render_league_detail(assigns) %>
+        <% else %>
+          <%= render_dashboard(assigns) %>
+        <% end %>
+      </div>
+    </div>
+    """
+  end
 
-                <!-- Current Leagues -->
-                <div>
-                  <div class="flex justify-between items-center mb-4">
-                    <h4 class="text-md font-medium text-base-content">Your Leagues</h4>
-                    <button phx-click="refresh_leagues" class="btn btn-ghost btn-sm">
-                      <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                      </svg>
-                    </button>
-                  </div>
-                  
-                  <%= if length(@leagues) > 0 do %>
-                    <div class="space-y-3">
-                      <%= for league <- @leagues do %>
-                        <div class="card bg-base-200 border border-base-300 p-4">
-                          <div class="flex justify-between items-start">
-                            <div>
-                              <h5 class="font-medium text-base-content"><%= league.name %></h5>
-                              <p class="text-sm text-base-content opacity-70">
-                                <%= league.season %> • <%= String.capitalize(to_string(league.league_type)) %> • 
-                                <%= String.capitalize(to_string(league.scoring_format)) %>
-                              </p>
-                              <p class="text-xs text-base-content opacity-50 mt-1">
-                                Sleeper ID: <%= league.sleeper_id %>
-                              </p>
-                            </div>
-                            <.link navigate={~p"/dashboard/league/#{league.id}"} class="btn btn-secondary btn-sm">
-                              View Details
-                            </.link>
-                          </div>
+  # Render main dashboard view
+  defp render_dashboard(assigns) do
+    ~H"""
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <!-- League Management Panel -->
+      <div class="lg:col-span-2">
+        <div class="card bg-base-100 shadow-xl">
+          <div class="card-body">
+            <h3 class="card-title text-base-content mb-4">League Management</h3>
+            
+            <!-- Sync from Sleeper Form -->
+            <div class="mb-6">
+              <h4 class="text-md font-medium text-base-content mb-2">Sync League from Sleeper</h4>
+              <form phx-submit="sync_league" class="flex space-x-2">
+                <input
+                  type="text"
+                  name="sleeper_id"
+                  placeholder="Enter Sleeper League ID"
+                  class="input input-bordered flex-1"
+                  required
+                />
+                <button
+                  type="submit"
+                  class="btn btn-primary"
+                  disabled={@loading}
+                >
+                  <%= if @loading, do: "Syncing...", else: "Sync League" %>
+                </button>
+              </form>
+              <p class="mt-2 text-sm text-base-content opacity-70">
+                Enter your Sleeper league ID to import league data and teams.
+              </p>
+            </div>
+
+            <!-- Current Leagues -->
+            <div>
+              <div class="flex justify-between items-center mb-4">
+                <h4 class="text-md font-medium text-base-content">Your Leagues</h4>
+                <button phx-click="refresh_leagues" class="btn btn-ghost btn-sm">
+                  <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                </button>
+              </div>
+              
+              <%= if length(@leagues) > 0 do %>
+                <div class="space-y-3">
+                  <%= for league <- @leagues do %>
+                    <div class="card bg-base-200 border border-base-300 p-4">
+                      <div class="flex justify-between items-start">
+                        <div>
+                          <h5 class="font-medium text-base-content"><%= league.name %></h5>
+                          <p class="text-sm text-base-content opacity-70">
+                            <%= league.season %> • <%= String.capitalize(to_string(league.league_type)) %> • 
+                            <%= String.capitalize(to_string(league.scoring_format)) %>
+                          </p>
+                          <p class="text-xs text-base-content opacity-50 mt-1">
+                            Sleeper ID: <%= league.sleeper_id %>
+                          </p>
                         </div>
-                      <% end %>
+                        <.link navigate={~p"/dashboard/league/#{league.id}"} class="btn btn-secondary btn-sm">
+                          View Details
+                        </.link>
+                      </div>
                     </div>
-                  <% else %>
-                    <p class="text-base-content opacity-70 text-center py-4">
-                      No leagues found. Sync a league from Sleeper to get started.
-                    </p>
                   <% end %>
                 </div>
+              <% else %>
+                <p class="text-base-content opacity-70 text-center py-4">
+                  No leagues found. Sync a league from Sleeper to get started.
+                </p>
+              <% end %>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Player Search Panel -->
+      <div>
+        <div class="card bg-base-100 shadow-xl">
+          <div class="card-body">
+            <h3 class="card-title text-base-content mb-4">Player Search</h3>
+            
+            <form phx-submit="search_players">
+              <div class="flex">
+                <input
+                  type="text"
+                  name="search[query]"
+                  value={@search_query}
+                  placeholder="Search players..."
+                  class="input input-bordered flex-1 rounded-r-none"
+                />
+                <button
+                  type="submit"
+                  class="btn btn-primary rounded-l-none"
+                  disabled={@loading}
+                >
+                  Search
+                </button>
+              </div>
+            </form>
+
+            <%= if length(@players) > 0 do %>
+              <div class="mt-4 space-y-2">
+                <%= for player <- @players do %>
+                  <div class="card bg-base-200 border border-base-300 p-3">
+                    <div class="flex justify-between items-center">
+                      <div>
+                        <p class="font-medium text-base-content"><%= player.name %></p>
+                        <p class="text-sm text-base-content opacity-70">
+                          <%= player.position %> • <%= player.nfl_team || "FA" %>
+                        </p>
+                      </div>
+                      <div class="text-right">
+                        <p class="text-sm font-medium text-primary">
+                          Dynasty: <%= Float.round(Decimal.to_float(player.dynasty_value), 1) %>
+                        </p>
+                        <%= if player.injury_status != :Active do %>
+                          <p class="text-xs text-error">
+                            <%= player.injury_status %>
+                          </p>
+                        <% end %>
+                      </div>
+                    </div>
+                  </div>
+                <% end %>
+              </div>
+            <% else %>
+              <%= if @search_query != "" do %>
+                <p class="text-base-content opacity-70 text-center py-4 mt-4">
+                  No players found for "<%= @search_query %>".
+                </p>
+              <% end %>
+            <% end %>
+          </div>
+        </div>
+
+        <!-- Quick Stats -->
+        <div class="card bg-base-100 shadow-xl mt-6">
+          <div class="card-body">
+            <h3 class="card-title text-base-content mb-4">Quick Stats</h3>
+            <div class="space-y-3">
+              <div class="flex justify-between">
+                <span class="text-sm text-base-content opacity-70">Total Leagues</span>
+                <span class="text-sm font-medium text-base-content"><%= length(@leagues) %></span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-sm text-base-content opacity-70">Dynasty Leagues</span>
+                <span class="text-sm font-medium text-base-content">
+                  <%= Enum.count(@leagues, &(&1.league_type == :dynasty)) %>
+                </span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-sm text-base-content opacity-70">Keeper Leagues</span>
+                <span class="text-sm font-medium text-base-content">
+                  <%= Enum.count(@leagues, &(&1.league_type == :keeper)) %>
+                </span>
               </div>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+    """
+  end
 
-          <!-- Player Search Panel -->
-          <div>
-            <div class="card bg-base-100 shadow-xl">
-              <div class="card-body">
-                <h3 class="card-title text-base-content mb-4">Player Search</h3>
-                
-                <form phx-submit="search_players">
-                  <div class="flex">
-                    <input
-                      type="text"
-                      name="search[query]"
-                      value={@search_query}
-                      placeholder="Search players..."
-                      class="input input-bordered flex-1 rounded-r-none"
-                    />
-                    <button
-                      type="submit"
-                      class="btn btn-primary rounded-l-none"
-                      disabled={@loading}
-                    >
-                      Search
-                    </button>
-                  </div>
-                </form>
+  # Render league detail view  
+  defp render_league_detail(assigns) do
+    ~H"""
+    <div class="mb-6">
+      <.link navigate={~p"/dashboard"} class="btn btn-ghost btn-sm">
+        ← Back to Dashboard
+      </.link>
+    </div>
 
-                <%= if length(@players) > 0 do %>
-                  <div class="mt-4 space-y-2">
-                    <%= for player <- @players do %>
-                      <div class="card bg-base-200 border border-base-300 p-3">
-                        <div class="flex justify-between items-center">
-                          <div>
-                            <p class="font-medium text-base-content"><%= player.name %></p>
-                            <p class="text-sm text-base-content opacity-70">
-                              <%= player.position %> • <%= player.nfl_team || "FA" %>
-                            </p>
-                          </div>
-                          <div class="text-right">
-                            <p class="text-sm font-medium text-primary">
-                              Dynasty: <%= Float.round(Decimal.to_float(player.dynasty_value), 1) %>
-                            </p>
-                            <%= if player.injury_status != :Active do %>
-                              <p class="text-xs text-error">
-                                <%= player.injury_status %>
-                              </p>
-                            <% end %>
-                          </div>
-                        </div>
-                      </div>
-                    <% end %>
-                  </div>
-                <% else %>
-                  <%= if @search_query != "" do %>
-                    <p class="text-base-content opacity-70 text-center py-4 mt-4">
-                      No players found for "<%= @search_query %>".
-                    </p>
-                  <% end %>
-                <% end %>
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <!-- League Info -->
+      <div class="lg:col-span-2">
+        <div class="card bg-base-100 shadow-xl">
+          <div class="card-body">
+            <h2 class="card-title text-2xl text-base-content mb-4"><%= @selected_league.name %></h2>
+            
+            <div class="grid grid-cols-2 gap-4 mb-6">
+              <div>
+                <p class="text-sm text-base-content opacity-70">Season</p>
+                <p class="font-medium text-base-content"><%= @selected_league.season %></p>
+              </div>
+              <div>
+                <p class="text-sm text-base-content opacity-70">League Type</p>
+                <p class="font-medium text-base-content"><%= String.capitalize(to_string(@selected_league.league_type)) %></p>
+              </div>
+              <div>
+                <p class="text-sm text-base-content opacity-70">Scoring Format</p>
+                <p class="font-medium text-base-content"><%= String.capitalize(to_string(@selected_league.scoring_format)) %></p>
+              </div>
+              <div>
+                <p class="text-sm text-base-content opacity-70">Teams</p>
+                <p class="font-medium text-base-content"><%= length(@selected_league.fantasy_teams) %></p>
               </div>
             </div>
 
-            <!-- Quick Stats -->
-            <div class="card bg-base-100 shadow-xl mt-6">
-              <div class="card-body">
-                <h3 class="card-title text-base-content mb-4">Quick Stats</h3>
-                <div class="space-y-3">
-                  <div class="flex justify-between">
-                    <span class="text-sm text-base-content opacity-70">Total Leagues</span>
-                    <span class="text-sm font-medium text-base-content"><%= length(@leagues) %></span>
+            <!-- Fantasy Teams -->
+            <h3 class="text-lg font-semibold text-base-content mb-4">Teams</h3>
+            <%= if length(@selected_league.fantasy_teams) > 0 do %>
+              <div class="space-y-3">
+                <%= for team <- @selected_league.fantasy_teams do %>
+                  <div class="card bg-base-200 border border-base-300 p-4">
+                    <div class="flex justify-between items-start">
+                      <div>
+                        <h4 class="font-medium text-base-content"><%= team.name %></h4>
+                        <p class="text-sm text-base-content opacity-70">
+                          Owner: <%= team.owner_name || "Unknown" %>
+                        </p>
+                        <%= if team.wins || team.losses do %>
+                          <p class="text-xs text-base-content opacity-50 mt-1">
+                            Record: <%= team.wins || 0 %>-<%= team.losses || 0 %>-<%= team.ties || 0 %>
+                          </p>
+                        <% end %>
+                      </div>
+                      <div class="text-right">
+                        <%= if team.points_for do %>
+                          <p class="text-sm font-medium text-primary">
+                            <%= team.points_for |> Decimal.to_float() |> Float.round(1) %> PF
+                          </p>
+                        <% end %>
+                        <%= if team.faab_budget do %>
+                          <p class="text-xs text-base-content opacity-50">
+                            $<%= team.faab_budget %> FAAB
+                          </p>
+                        <% end %>
+                      </div>
+                    </div>
                   </div>
-                  <div class="flex justify-between">
-                    <span class="text-sm text-base-content opacity-70">Dynasty Leagues</span>
-                    <span class="text-sm font-medium text-base-content">
-                      <%= Enum.count(@leagues, &(&1.league_type == :dynasty)) %>
-                    </span>
-                  </div>
-                  <div class="flex justify-between">
-                    <span class="text-sm text-base-content opacity-70">Keeper Leagues</span>
-                    <span class="text-sm font-medium text-base-content">
-                      <%= Enum.count(@leagues, &(&1.league_type == :keeper)) %>
-                    </span>
-                  </div>
-                </div>
+                <% end %>
               </div>
+            <% else %>
+              <p class="text-base-content opacity-70 text-center py-4">
+                No teams found. Try syncing the league to load team data.
+              </p>
+            <% end %>
+          </div>
+        </div>
+      </div>
+
+      <!-- League Stats -->
+      <div>
+        <div class="card bg-base-100 shadow-xl">
+          <div class="card-body">
+            <h3 class="card-title text-base-content mb-4">League Settings</h3>
+            <div class="space-y-3">
+              <div class="flex justify-between">
+                <span class="text-sm text-base-content opacity-70">Roster Size</span>
+                <span class="text-sm font-medium text-base-content"><%= @selected_league.roster_size %></span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-sm text-base-content opacity-70">Playoff Teams</span>
+                <span class="text-sm font-medium text-base-content"><%= @selected_league.playoff_teams %></span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-sm text-base-content opacity-70">Trade Deadline</span>
+                <span class="text-sm font-medium text-base-content">Week <%= @selected_league.trade_deadline_week %></span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-sm text-base-content opacity-70">Waiver Type</span>
+                <span class="text-sm font-medium text-base-content">
+                  <%= String.upcase(to_string(@selected_league.waiver_type)) %>
+                </span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-sm text-base-content opacity-70">Draft Type</span>
+                <span class="text-sm font-medium text-base-content">
+                  <%= String.capitalize(to_string(@selected_league.draft_type)) %>
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card bg-base-100 shadow-xl mt-6">
+          <div class="card-body">
+            <h3 class="card-title text-base-content mb-4">Actions</h3>
+            <div class="space-y-2">
+              <button phx-click="sync_teams_and_rosters" phx-value-sleeper_id={@selected_league.sleeper_id} class="btn btn-primary btn-block" disabled={@loading}>
+                <%= if @loading, do: "Syncing...", else: "Sync Teams & Rosters" %>
+              </button>
+              <.link navigate={~p"/dashboard/recommendations"} class="btn btn-secondary btn-block">
+                Get AI Recommendations
+              </.link>
             </div>
           </div>
         </div>
