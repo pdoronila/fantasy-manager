@@ -1,0 +1,502 @@
+openapi: 3.0.3
+info:
+  title: Fantasy Manager Players API
+  version: 0.1.0
+  description: API for managing NFL players and fantasy-relevant data
+
+paths:
+  /api/v1/players:
+    get:
+      summary: List all players
+      parameters:
+        - name: position
+          in: query
+          schema:
+            type: string
+            enum: [QB, RB, WR, TE, K, DEF]
+        - name: injury_status
+          in: query
+          schema:
+            type: string
+            enum: [Active, Questionable, Doubtful, Out, IR, PUP]
+        - name: nfl_team
+          in: query
+          schema:
+            type: string
+        - name: dynasty_value_min
+          in: query
+          schema:
+            type: number
+            minimum: 0
+            maximum: 100
+        - name: dynasty_value_max
+          in: query
+          schema:
+            type: number
+            minimum: 0
+            maximum: 100
+        - name: page[size]
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: page[offset]
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [name, position, dynasty_value, -dynasty_value, age, -age]
+      responses:
+        '200':
+          description: List of players
+          content:
+            application/vnd.api+json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Player'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '400':
+          description: Invalid query parameters
+          content:
+            application/vnd.api+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    post:
+      summary: Create a new player
+      requestBody:
+        required: true
+        content:
+          application/vnd.api+json:
+            schema:
+              type: object
+              properties:
+                data:
+                  $ref: '#/components/schemas/CreatePlayerRequest'
+      responses:
+        '201':
+          description: Player created successfully
+          content:
+            application/vnd.api+json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Player'
+        '422':
+          description: Validation error
+          content:
+            application/vnd.api+json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+
+  /api/v1/players/{player_id}:
+    get:
+      summary: Get player by ID
+      parameters:
+        - name: player_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: include
+          in: query
+          schema:
+            type: string
+            example: "stats,projections,keeper_contracts"
+      responses:
+        '200':
+          description: Player details
+          content:
+            application/vnd.api+json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Player'
+                  included:
+                    type: array
+                    items:
+                      oneOf:
+                        - $ref: '#/components/schemas/PlayerStat'
+                        - $ref: '#/components/schemas/WeeklyProjection'
+                        - $ref: '#/components/schemas/KeeperContract'
+        '404':
+          description: Player not found
+          content:
+            application/vnd.api+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    patch:
+      summary: Update player
+      parameters:
+        - name: player_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/vnd.api+json:
+            schema:
+              type: object
+              properties:
+                data:
+                  $ref: '#/components/schemas/UpdatePlayerRequest'
+      responses:
+        '200':
+          description: Player updated successfully
+          content:
+            application/vnd.api+json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Player'
+        '404':
+          description: Player not found
+        '422':
+          description: Validation error
+
+  /api/v1/players/{player_id}/sync-sleeper:
+    post:
+      summary: Sync player data from Sleeper API
+      parameters:
+        - name: player_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Player data synced successfully
+          content:
+            application/vnd.api+json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Player'
+        '404':
+          description: Player not found
+        '502':
+          description: Sleeper API unavailable
+
+  /api/v1/players/search:
+    get:
+      summary: Search players by name or other criteria
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 2
+        - name: position
+          in: query
+          schema:
+            type: string
+            enum: [QB, RB, WR, TE, K, DEF]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 10
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/vnd.api+json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Player'
+
+components:
+  schemas:
+    Player:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [player]
+        id:
+          type: string
+          format: uuid
+        attributes:
+          type: object
+          properties:
+            name:
+              type: string
+              example: "Josh Allen"
+            position:
+              type: string
+              enum: [QB, RB, WR, TE, K, DEF]
+              example: "QB"
+            nfl_team:
+              type: string
+              example: "BUF"
+            injury_status:
+              type: string
+              enum: [Active, Questionable, Doubtful, Out, IR, PUP]
+              example: "Active"
+            age:
+              type: integer
+              minimum: 18
+              maximum: 50
+              example: 27
+            years_pro:
+              type: integer
+              minimum: 0
+              example: 6
+            dynasty_value:
+              type: number
+              minimum: 0
+              maximum: 100
+              example: 95.5
+            keeper_eligible:
+              type: boolean
+              example: true
+            sleeper_id:
+              type: string
+              example: "4881"
+            inserted_at:
+              type: string
+              format: date-time
+            updated_at:
+              type: string
+              format: date-time
+        relationships:
+          type: object
+          properties:
+            stats:
+              type: object
+              properties:
+                links:
+                  type: object
+                  properties:
+                    related:
+                      type: string
+                      example: "/api/v1/players/123/stats"
+            projections:
+              type: object
+              properties:
+                links:
+                  type: object
+                  properties:
+                    related:
+                      type: string
+                      example: "/api/v1/players/123/projections"
+
+    CreatePlayerRequest:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [player]
+        attributes:
+          type: object
+          required: [name, position]
+          properties:
+            name:
+              type: string
+              minLength: 2
+            position:
+              type: string
+              enum: [QB, RB, WR, TE, K, DEF]
+            nfl_team:
+              type: string
+            sleeper_id:
+              type: string
+            dynasty_value:
+              type: number
+              minimum: 0
+              maximum: 100
+
+    UpdatePlayerRequest:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [player]
+        attributes:
+          type: object
+          properties:
+            injury_status:
+              type: string
+              enum: [Active, Questionable, Doubtful, Out, IR, PUP]
+            dynasty_value:
+              type: number
+              minimum: 0
+              maximum: 100
+            keeper_eligible:
+              type: boolean
+            nfl_team:
+              type: string
+
+    PlayerStat:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [player_stat]
+        id:
+          type: string
+          format: uuid
+        attributes:
+          type: object
+          properties:
+            season:
+              type: integer
+              example: 2024
+            week:
+              type: integer
+              minimum: 1
+              maximum: 18
+              nullable: true
+            passing_yards:
+              type: integer
+              minimum: 0
+            passing_tds:
+              type: integer
+              minimum: 0
+            rushing_yards:
+              type: integer
+              minimum: 0
+            receiving_yards:
+              type: integer
+              minimum: 0
+            fantasy_points:
+              type: number
+              minimum: 0
+              example: 24.5
+
+    WeeklyProjection:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [weekly_projection]
+        id:
+          type: string
+          format: uuid
+        attributes:
+          type: object
+          properties:
+            season:
+              type: integer
+            week:
+              type: integer
+              minimum: 1
+              maximum: 18
+            projected_points:
+              type: number
+              minimum: 0
+            confidence_score:
+              type: number
+              minimum: 0
+              maximum: 1
+            projection_model:
+              type: string
+            created_by:
+              type: string
+
+    KeeperContract:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [keeper_contract]
+        id:
+          type: string
+          format: uuid
+        attributes:
+          type: object
+          properties:
+            contract_year:
+              type: integer
+            years_remaining:
+              type: integer
+              minimum: 0
+            keeper_cost:
+              type: integer
+              minimum: 1
+            is_eligible:
+              type: boolean
+            designation_deadline:
+              type: string
+              format: date
+
+    PaginationMeta:
+      type: object
+      properties:
+        page:
+          type: object
+          properties:
+            total:
+              type: integer
+            size:
+              type: integer
+            offset:
+              type: integer
+
+    Error:
+      type: object
+      properties:
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              title:
+                type: string
+              detail:
+                type: string
+              status:
+                type: string
+
+    ValidationError:
+      type: object
+      properties:
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              title:
+                type: string
+                example: "Validation Error"
+              detail:
+                type: string
+                example: "Name must be at least 2 characters long"
+              status:
+                type: string
+                example: "422"
+              source:
+                type: object
+                properties:
+                  pointer:
+                    type: string
+                    example: "/data/attributes/name"

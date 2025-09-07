@@ -1,0 +1,589 @@
+openapi: 3.0.3
+info:
+  title: Fantasy Manager Leagues API
+  version: 0.1.0
+  description: API for managing fantasy football leagues and teams
+
+paths:
+  /api/v1/leagues:
+    get:
+      summary: List user's leagues
+      parameters:
+        - name: season
+          in: query
+          schema:
+            type: integer
+        - name: league_type
+          in: query
+          schema:
+            type: string
+            enum: [keeper, dynasty, redraft]
+        - name: include
+          in: query
+          schema:
+            type: string
+            example: "teams,teams.players"
+      responses:
+        '200':
+          description: List of leagues
+          content:
+            application/vnd.api+json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/League'
+
+    post:
+      summary: Create or sync league from Sleeper
+      requestBody:
+        required: true
+        content:
+          application/vnd.api+json:
+            schema:
+              type: object
+              properties:
+                data:
+                  $ref: '#/components/schemas/CreateLeagueRequest'
+      responses:
+        '201':
+          description: League created successfully
+          content:
+            application/vnd.api+json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/League'
+
+  /api/v1/leagues/{league_id}:
+    get:
+      summary: Get league details
+      parameters:
+        - name: league_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: include
+          in: query
+          schema:
+            type: string
+            example: "teams,teams.players,matchups"
+      responses:
+        '200':
+          description: League details
+          content:
+            application/vnd.api+json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/League'
+                  included:
+                    type: array
+                    items:
+                      oneOf:
+                        - $ref: '#/components/schemas/FantasyTeam'
+                        - $ref: '#/components/schemas/Matchup'
+
+    patch:
+      summary: Update league settings
+      parameters:
+        - name: league_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/vnd.api+json:
+            schema:
+              type: object
+              properties:
+                data:
+                  $ref: '#/components/schemas/UpdateLeagueRequest'
+      responses:
+        '200':
+          description: League updated successfully
+
+  /api/v1/leagues/{league_id}/sync-sleeper:
+    post:
+      summary: Sync league data from Sleeper API
+      parameters:
+        - name: league_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: full_sync
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: League synced successfully
+          content:
+            application/vnd.api+json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/League'
+                  meta:
+                    type: object
+                    properties:
+                      sync_stats:
+                        type: object
+                        properties:
+                          teams_updated:
+                            type: integer
+                          players_updated:
+                            type: integer
+                          rosters_synced:
+                            type: integer
+
+  /api/v1/teams:
+    get:
+      summary: List fantasy teams (optionally filtered by league)
+      parameters:
+        - name: league_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: competitive_window
+          in: query
+          schema:
+            type: string
+            enum: [Contending, Rebuilding, Neutral]
+        - name: include
+          in: query
+          schema:
+            type: string
+            example: "players,keeper_contracts"
+      responses:
+        '200':
+          description: List of fantasy teams
+          content:
+            application/vnd.api+json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FantasyTeam'
+
+  /api/v1/teams/{team_id}:
+    get:
+      summary: Get team details
+      parameters:
+        - name: team_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: include
+          in: query
+          schema:
+            type: string
+            example: "players,players.stats,keeper_contracts,league"
+      responses:
+        '200':
+          description: Team details
+          content:
+            application/vnd.api+json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/FantasyTeam'
+
+    patch:
+      summary: Update team settings
+      parameters:
+        - name: team_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/vnd.api+json:
+            schema:
+              type: object
+              properties:
+                data:
+                  $ref: '#/components/schemas/UpdateTeamRequest'
+      responses:
+        '200':
+          description: Team updated successfully
+
+  /api/v1/teams/{team_id}/roster:
+    get:
+      summary: Get current team roster
+      parameters:
+        - name: team_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: position
+          in: query
+          schema:
+            type: string
+            enum: [Starter, Bench, IR, Taxi]
+        - name: include_projections
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Team roster
+          content:
+            application/vnd.api+json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RosterPlayer'
+
+  /api/v1/teams/{team_id}/available-players:
+    get:
+      summary: Get available free agents for team's league
+      parameters:
+        - name: team_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: position
+          in: query
+          schema:
+            type: string
+            enum: [QB, RB, WR, TE, K, DEF]
+        - name: ownership_threshold
+          in: query
+          schema:
+            type: number
+            minimum: 0
+            maximum: 100
+            default: 50
+      responses:
+        '200':
+          description: Available players
+          content:
+            application/vnd.api+json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AvailablePlayer'
+
+components:
+  schemas:
+    League:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [league]
+        id:
+          type: string
+          format: uuid
+        attributes:
+          type: object
+          properties:
+            name:
+              type: string
+            sleeper_id:
+              type: string
+            season:
+              type: integer
+            league_type:
+              type: string
+              enum: [keeper, dynasty, redraft]
+            scoring_format:
+              type: string
+              enum: [PPR, Half PPR, Standard, Superflex]
+            roster_size:
+              type: integer
+            keeper_count:
+              type: integer
+            dynasty_transition_year:
+              type: integer
+              nullable: true
+            trade_deadline_week:
+              type: integer
+            waiver_type:
+              type: string
+              enum: [FAAB, Rolling, Reverse]
+            inserted_at:
+              type: string
+              format: date-time
+            updated_at:
+              type: string
+              format: date-time
+        relationships:
+          type: object
+          properties:
+            teams:
+              type: object
+              properties:
+                links:
+                  type: object
+                  properties:
+                    related:
+                      type: string
+                      example: "/api/v1/leagues/123/teams"
+
+    CreateLeagueRequest:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [league]
+        attributes:
+          type: object
+          required: [sleeper_id]
+          properties:
+            sleeper_id:
+              type: string
+              description: Sleeper league ID to sync
+            sync_historical:
+              type: boolean
+              default: false
+              description: Whether to sync historical data
+
+    UpdateLeagueRequest:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [league]
+        attributes:
+          type: object
+          properties:
+            dynasty_transition_year:
+              type: integer
+            keeper_count:
+              type: integer
+
+    FantasyTeam:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [fantasy_team]
+        id:
+          type: string
+          format: uuid
+        attributes:
+          type: object
+          properties:
+            name:
+              type: string
+            sleeper_id:
+              type: string
+            owner_name:
+              type: string
+            competitive_window:
+              type: string
+              enum: [Contending, Rebuilding, Neutral]
+            waiver_priority:
+              type: integer
+            faab_budget:
+              type: integer
+            total_moves:
+              type: integer
+            inserted_at:
+              type: string
+              format: date-time
+        relationships:
+          type: object
+          properties:
+            league:
+              type: object
+              properties:
+                data:
+                  type: object
+                  properties:
+                    type:
+                      type: string
+                      enum: [league]
+                    id:
+                      type: string
+                      format: uuid
+            players:
+              type: object
+              properties:
+                links:
+                  type: object
+                  properties:
+                    related:
+                      type: string
+                      example: "/api/v1/teams/123/roster"
+
+    UpdateTeamRequest:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [fantasy_team]
+        attributes:
+          type: object
+          properties:
+            competitive_window:
+              type: string
+              enum: [Contending, Rebuilding, Neutral]
+
+    RosterPlayer:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [roster_player]
+        id:
+          type: string
+          format: uuid
+        attributes:
+          type: object
+          properties:
+            roster_position:
+              type: string
+              enum: [Starter, Bench, IR, Taxi]
+            lineup_position:
+              type: string
+              enum: [QB, RB1, RB2, WR1, WR2, WR3, TE, FLEX, K, DEF]
+              nullable: true
+            acquisition_type:
+              type: string
+              enum: [Draft, Trade, Waiver, Free Agent]
+            acquisition_date:
+              type: string
+              format: date
+            acquisition_cost:
+              type: integer
+        relationships:
+          type: object
+          properties:
+            player:
+              type: object
+              properties:
+                data:
+                  type: object
+                  properties:
+                    type:
+                      type: string
+                      enum: [player]
+                    id:
+                      type: string
+                      format: uuid
+
+    AvailablePlayer:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [available_player]
+        id:
+          type: string
+          format: uuid
+        attributes:
+          type: object
+          properties:
+            name:
+              type: string
+            position:
+              type: string
+            nfl_team:
+              type: string
+            ownership_percentage:
+              type: number
+              minimum: 0
+              maximum: 100
+            projected_points:
+              type: number
+              nullable: true
+            dynasty_value:
+              type: number
+              nullable: true
+            recent_trend:
+              type: string
+              enum: [Up, Down, Stable]
+
+    Matchup:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [matchup]
+        id:
+          type: string
+          format: uuid
+        attributes:
+          type: object
+          properties:
+            season:
+              type: integer
+            week:
+              type: integer
+            team_1_score:
+              type: number
+              nullable: true
+            team_2_score:
+              type: number
+              nullable: true
+            is_playoffs:
+              type: boolean
+            matchup_type:
+              type: string
+              enum: [Regular, Playoffs, Championship]
+            inserted_at:
+              type: string
+              format: date-time
+        relationships:
+          type: object
+          properties:
+            team_1:
+              type: object
+              properties:
+                data:
+                  type: object
+                  properties:
+                    type:
+                      type: string
+                      enum: [fantasy_team]
+                    id:
+                      type: string
+                      format: uuid
+            team_2:
+              type: object
+              properties:
+                data:
+                  type: object
+                  properties:
+                    type:
+                      type: string
+                      enum: [fantasy_team]
+                    id:
+                      type: string
+                      format: uuid

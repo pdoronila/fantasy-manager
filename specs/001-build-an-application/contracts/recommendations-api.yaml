@@ -1,0 +1,741 @@
+openapi: 3.0.3
+info:
+  title: Fantasy Manager AI Recommendations API
+  version: 0.1.0
+  description: API for AI-powered fantasy football recommendations and analysis
+
+paths:
+  /api/v1/recommendations:
+    get:
+      summary: List recommendations for a team
+      parameters:
+        - name: fantasy_team_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: recommendation_type
+          in: query
+          schema:
+            type: string
+            enum: [Lineup, Trade, Pickup, Keeper, Dynasty]
+        - name: time_horizon
+          in: query
+          schema:
+            type: string
+            enum: [Short, Medium, Long]
+        - name: active_only
+          in: query
+          schema:
+            type: boolean
+            default: true
+        - name: page[size]
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 10
+      responses:
+        '200':
+          description: List of recommendations
+          content:
+            application/vnd.api+json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Recommendation'
+
+    post:
+      summary: Generate new recommendation
+      requestBody:
+        required: true
+        content:
+          application/vnd.api+json:
+            schema:
+              type: object
+              properties:
+                data:
+                  $ref: '#/components/schemas/CreateRecommendationRequest'
+      responses:
+        '201':
+          description: Recommendation generated successfully
+          content:
+            application/vnd.api+json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Recommendation'
+        '422':
+          description: Validation error
+        '503':
+          description: AI service unavailable
+
+  /api/v1/recommendations/{recommendation_id}:
+    get:
+      summary: Get recommendation by ID
+      parameters:
+        - name: recommendation_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Recommendation details
+          content:
+            application/vnd.api+json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Recommendation'
+        '404':
+          description: Recommendation not found
+
+  /api/v1/lineups/optimize:
+    post:
+      summary: Generate optimal lineup recommendations
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LineupOptimizationRequest'
+      responses:
+        '200':
+          description: Optimized lineup recommendations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LineupOptimizationResponse'
+        '422':
+          description: Invalid request parameters
+
+  /api/v1/trades/analyze:
+    post:
+      summary: Analyze trade proposal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TradeAnalysisRequest'
+      responses:
+        '200':
+          description: Trade analysis results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TradeAnalysisResponse'
+        '422':
+          description: Invalid trade proposal
+
+  /api/v1/trades/suggest:
+    post:
+      summary: Generate trade suggestions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TradeSuggestionRequest'
+      responses:
+        '200':
+          description: Trade suggestions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TradeSuggestionResponse'
+
+  /api/v1/pickups/analyze:
+    post:
+      summary: Analyze available free agents for pickup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PickupAnalysisRequest'
+      responses:
+        '200':
+          description: Free agent pickup recommendations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PickupAnalysisResponse'
+
+  /api/v1/keepers/optimize:
+    post:
+      summary: Optimize keeper selections
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KeeperOptimizationRequest'
+      responses:
+        '200':
+          description: Optimal keeper selections
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KeeperOptimizationResponse'
+
+  /api/v1/dynasty/plan:
+    post:
+      summary: Generate dynasty transition planning
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DynastyPlanningRequest'
+      responses:
+        '200':
+          description: Dynasty transition plan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DynastyPlanningResponse'
+
+components:
+  schemas:
+    Recommendation:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [recommendation]
+        id:
+          type: string
+          format: uuid
+        attributes:
+          type: object
+          properties:
+            recommendation_type:
+              type: string
+              enum: [Lineup, Trade, Pickup, Keeper, Dynasty]
+            context:
+              type: object
+              description: Original request parameters
+            recommendation_data:
+              type: object
+              description: Structured recommendation results
+            confidence_score:
+              type: number
+              minimum: 0
+              maximum: 1
+            reasoning:
+              type: string
+              description: AI-generated explanation
+            time_horizon:
+              type: string
+              enum: [Short, Medium, Long]
+            ai_model:
+              type: string
+            expires_at:
+              type: string
+              format: date-time
+            inserted_at:
+              type: string
+              format: date-time
+
+    CreateRecommendationRequest:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [recommendation]
+        attributes:
+          type: object
+          required: [fantasy_team_id, recommendation_type, context]
+          properties:
+            fantasy_team_id:
+              type: string
+              format: uuid
+            recommendation_type:
+              type: string
+              enum: [Lineup, Trade, Pickup, Keeper, Dynasty]
+            context:
+              type: object
+              description: Request-specific parameters
+            time_horizon:
+              type: string
+              enum: [Short, Medium, Long]
+              default: Short
+
+    LineupOptimizationRequest:
+      type: object
+      required: [fantasy_team_id, week]
+      properties:
+        fantasy_team_id:
+          type: string
+          format: uuid
+        week:
+          type: integer
+          minimum: 1
+          maximum: 18
+        season:
+          type: integer
+          default: 2024
+        injury_threshold:
+          type: string
+          enum: [Active, Questionable, Doubtful]
+          default: Questionable
+        risk_tolerance:
+          type: string
+          enum: [Conservative, Balanced, Aggressive]
+          default: Balanced
+
+    LineupOptimizationResponse:
+      type: object
+      properties:
+        optimal_lineup:
+          type: object
+          properties:
+            qb:
+              $ref: '#/components/schemas/LineupPlayer'
+            rb1:
+              $ref: '#/components/schemas/LineupPlayer'
+            rb2:
+              $ref: '#/components/schemas/LineupPlayer'
+            wr1:
+              $ref: '#/components/schemas/LineupPlayer'
+            wr2:
+              $ref: '#/components/schemas/LineupPlayer'
+            te:
+              $ref: '#/components/schemas/LineupPlayer'
+            flex:
+              $ref: '#/components/schemas/LineupPlayer'
+            k:
+              $ref: '#/components/schemas/LineupPlayer'
+            def:
+              $ref: '#/components/schemas/LineupPlayer'
+        projected_total:
+          type: number
+          minimum: 0
+        confidence_score:
+          type: number
+          minimum: 0
+          maximum: 1
+        alternatives:
+          type: array
+          items:
+            type: object
+            properties:
+              position:
+                type: string
+              players:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LineupPlayer'
+        reasoning:
+          type: string
+
+    LineupPlayer:
+      type: object
+      properties:
+        player_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        position:
+          type: string
+        projected_points:
+          type: number
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+        matchup_analysis:
+          type: string
+        injury_risk:
+          type: string
+          enum: [Low, Medium, High]
+
+    TradeAnalysisRequest:
+      type: object
+      required: [fantasy_team_id, offered_players, requested_players]
+      properties:
+        fantasy_team_id:
+          type: string
+          format: uuid
+        offered_players:
+          type: array
+          items:
+            type: string
+            format: uuid
+        requested_players:
+          type: array
+          items:
+            type: string
+            format: uuid
+        offered_picks:
+          type: array
+          items:
+            type: object
+            properties:
+              year:
+                type: integer
+              round:
+                type: integer
+        requested_picks:
+          type: array
+          items:
+            type: object
+            properties:
+              year:
+                type: integer
+              round:
+                type: integer
+        competitive_window:
+          type: string
+          enum: [Contending, Rebuilding, Neutral]
+
+    TradeAnalysisResponse:
+      type: object
+      properties:
+        recommendation:
+          type: string
+          enum: [Accept, Decline, Counter]
+        confidence_score:
+          type: number
+          minimum: 0
+          maximum: 1
+        value_analysis:
+          type: object
+          properties:
+            immediate_value:
+              type: number
+            dynasty_value:
+              type: number
+            positional_need:
+              type: number
+            total_score:
+              type: number
+        player_analysis:
+          type: array
+          items:
+            type: object
+            properties:
+              player_id:
+                type: string
+                format: uuid
+              direction:
+                type: string
+                enum: [Giving, Receiving]
+              current_value:
+                type: number
+              projected_value:
+                type: number
+              analysis:
+                type: string
+        counter_suggestions:
+          type: array
+          items:
+            type: object
+            properties:
+              modification_type:
+                type: string
+                enum: [Add, Remove, Replace]
+              player_id:
+                type: string
+                format: uuid
+              reasoning:
+                type: string
+        reasoning:
+          type: string
+
+    TradeSuggestionRequest:
+      type: object
+      required: [fantasy_team_id, needs]
+      properties:
+        fantasy_team_id:
+          type: string
+          format: uuid
+        needs:
+          type: array
+          items:
+            type: string
+            enum: [QB, RB, WR, TE, K, DEF, Depth, Youth, Picks]
+        surplus:
+          type: array
+          items:
+            type: string
+            enum: [QB, RB, WR, TE, K, DEF, Veterans, Picks]
+        target_teams:
+          type: array
+          items:
+            type: string
+            format: uuid
+        max_suggestions:
+          type: integer
+          minimum: 1
+          maximum: 10
+          default: 5
+
+    TradeSuggestionResponse:
+      type: object
+      properties:
+        suggestions:
+          type: array
+          items:
+            type: object
+            properties:
+              target_team_id:
+                type: string
+                format: uuid
+              target_team_name:
+                type: string
+              offered_players:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TradePlayerInfo'
+              requested_players:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TradePlayerInfo'
+              fairness_score:
+                type: number
+                minimum: 0
+                maximum: 1
+              mutual_benefit:
+                type: string
+              reasoning:
+                type: string
+
+    TradePlayerInfo:
+      type: object
+      properties:
+        player_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        position:
+          type: string
+        current_value:
+          type: number
+        dynasty_value:
+          type: number
+
+    PickupAnalysisRequest:
+      type: object
+      required: [fantasy_team_id]
+      properties:
+        fantasy_team_id:
+          type: string
+          format: uuid
+        week:
+          type: integer
+          minimum: 1
+          maximum: 18
+        season:
+          type: integer
+          default: 2024
+        positions:
+          type: array
+          items:
+            type: string
+            enum: [QB, RB, WR, TE, K, DEF]
+        budget_available:
+          type: integer
+          minimum: 0
+        max_suggestions:
+          type: integer
+          minimum: 1
+          maximum: 20
+          default: 10
+
+    PickupAnalysisResponse:
+      type: object
+      properties:
+        recommendations:
+          type: array
+          items:
+            type: object
+            properties:
+              player_id:
+                type: string
+                format: uuid
+              name:
+                type: string
+              position:
+                type: string
+              ownership_percentage:
+                type: number
+              projected_points:
+                type: number
+              dynasty_value:
+                type: number
+              suggested_bid:
+                type: integer
+              reasoning:
+                type: string
+              urgency:
+                type: string
+                enum: [Low, Medium, High, Critical]
+        drops_to_consider:
+          type: array
+          items:
+            type: object
+            properties:
+              player_id:
+                type: string
+                format: uuid
+              name:
+                type: string
+              reasoning:
+                type: string
+
+    KeeperOptimizationRequest:
+      type: object
+      required: [fantasy_team_id, keeper_deadline]
+      properties:
+        fantasy_team_id:
+          type: string
+          format: uuid
+        keeper_deadline:
+          type: string
+          format: date
+        max_keepers:
+          type: integer
+          minimum: 1
+        competitive_window:
+          type: string
+          enum: [Contending, Rebuilding, Neutral]
+
+    KeeperOptimizationResponse:
+      type: object
+      properties:
+        recommended_keepers:
+          type: array
+          items:
+            type: object
+            properties:
+              player_id:
+                type: string
+                format: uuid
+              name:
+                type: string
+              position:
+                type: string
+              keeper_cost:
+                type: integer
+              value_over_cost:
+                type: number
+              dynasty_potential:
+                type: number
+              reasoning:
+                type: string
+        alternatives:
+          type: array
+          items:
+            type: object
+            properties:
+              scenario:
+                type: string
+              keepers:
+                type: array
+                items:
+                  type: string
+              total_value:
+                type: number
+              reasoning:
+                type: string
+        non_keeper_recommendations:
+          type: array
+          items:
+            type: object
+            properties:
+              player_id:
+                type: string
+                format: uuid
+              name:
+                type: string
+              reason_to_release:
+                type: string
+
+    DynastyPlanningRequest:
+      type: object
+      required: [fantasy_team_id, transition_timeline]
+      properties:
+        fantasy_team_id:
+          type: string
+          format: uuid
+        transition_timeline:
+          type: string
+          enum: [This_Season, Next_Season, Two_Years, Long_Term]
+        current_strategy:
+          type: string
+          enum: [Contending, Rebuilding, Neutral]
+        risk_tolerance:
+          type: string
+          enum: [Conservative, Balanced, Aggressive]
+
+    DynastyPlanningResponse:
+      type: object
+      properties:
+        recommended_strategy:
+          type: string
+          enum: [Win_Now, Gradual_Rebuild, Full_Rebuild, Stay_Course]
+        timeline:
+          type: object
+          properties:
+            phase_1:
+              type: object
+              properties:
+                duration:
+                  type: string
+                actions:
+                  type: array
+                  items:
+                    type: string
+                targets:
+                  type: array
+                  items:
+                    type: string
+            phase_2:
+              type: object
+              properties:
+                duration:
+                  type: string
+                actions:
+                  type: array
+                  items:
+                    type: string
+        trade_targets:
+          type: array
+          items:
+            type: object
+            properties:
+              type:
+                type: string
+                enum: [Acquire, Trade_Away]
+              player_criteria:
+                type: string
+              reasoning:
+                type: string
+        draft_strategy:
+          type: object
+          properties:
+            early_rounds:
+              type: string
+            middle_rounds:
+              type: string
+            late_rounds:
+              type: string
+        success_metrics:
+          type: array
+          items:
+            type: string
+        reasoning:
+          type: string
