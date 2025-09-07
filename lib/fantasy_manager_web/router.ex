@@ -20,14 +20,44 @@ defmodule FantasyManagerWeb.Router do
     pipe_through :browser
 
     get "/", PageController, :home
+    
+    # Fantasy Manager LiveViews
+    live "/dashboard", DashboardLive, :index
+    live "/dashboard/league/:id", DashboardLive, :league_detail
+    live "/dashboard/recommendations", RecommendationsLive, :index
   end
 
   # API routes
-  scope "/api/v1", FantasyManagerWeb do
+  scope "/api/v1", FantasyManagerWeb.Api do
     pipe_through :api
     
-    # AshJsonApi routes will be added here
-    # forward "/", AshJsonApi.Router, api: FantasyManager.Api
+    # Players API
+    get "/players", PlayersController, :index
+    get "/players/search", PlayersController, :search
+    get "/players/:id", PlayersController, :show
+    get "/players/position/:position", PlayersController, :by_position
+    get "/players/dynasty", PlayersController, :dynasty_prospects
+    get "/players/injury-report", PlayersController, :injury_report
+    
+    # Leagues API
+    get "/leagues", LeaguesController, :index
+    get "/leagues/:id", LeaguesController, :show
+    post "/leagues", LeaguesController, :create
+    put "/leagues/:id", LeaguesController, :update
+    post "/leagues/sync", LeaguesController, :sync_from_sleeper
+    get "/leagues/season/:season", LeaguesController, :by_season
+    get "/leagues/type/:type", LeaguesController, :by_type
+    get "/leagues/keeper", LeaguesController, :keeper_leagues
+    get "/leagues/dynasty", LeaguesController, :dynasty_leagues
+    get "/leagues/:id/teams", LeaguesController, :teams
+    
+    # AI Recommendations API
+    post "/recommendations/optimize-lineup", RecommendationsController, :optimize_lineup
+    post "/recommendations/analyze-trade", RecommendationsController, :analyze_trade
+    post "/recommendations/projections", RecommendationsController, :get_projections
+    post "/recommendations/waivers", RecommendationsController, :waiver_suggestions
+    post "/recommendations/keepers", RecommendationsController, :keeper_recommendations
+    get "/recommendations/test", RecommendationsController, :test_connection
   end
 
   # Enable LiveDashboard and Swoosh mailbox preview in development

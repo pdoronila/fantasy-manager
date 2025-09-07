@@ -9,7 +9,6 @@ defmodule FantasyManager.Fantasy.League do
 
     references do
       reference :fantasy_teams, on_delete: :delete
-      reference :matchups, on_delete: :delete
     end
   end
 
@@ -106,10 +105,6 @@ defmodule FantasyManager.Fantasy.League do
     has_many :fantasy_teams, FantasyManager.Fantasy.FantasyTeam do
       destination_attribute :league_id
     end
-
-    has_many :matchups, FantasyManager.Fantasy.Matchup do
-      destination_attribute :league_id
-    end
   end
 
   calculations do
@@ -190,7 +185,7 @@ defmodule FantasyManager.Fantasy.League do
 
     create :create_from_sleeper do
       argument :sleeper_data, :map, allow_nil?: false
-      argument :sync_teams, :boolean, default: true
+      argument :sync_teams, :boolean, allow_nil?: true, default: true
       
       change fn changeset, context ->
         sleeper_data = Ash.Changeset.get_argument(changeset, :sleeper_data)
@@ -260,7 +255,7 @@ defmodule FantasyManager.Fantasy.League do
         case FantasyManager.External.SleeperClient.get_league(sleeper_id) do
           {:ok, league_data} ->
             # For now, always create new leagues - in production this would check for existing ones
-            {:ok, league} = __MODULE__.create_from_sleeper!(league_data, authorize?: false)
+            {:ok, league} = __MODULE__.create_from_sleeper!(league_data, sync_teams: true, authorize?: false)
             sync_result = if full_sync do
               sync_teams_and_rosters(league)
             else

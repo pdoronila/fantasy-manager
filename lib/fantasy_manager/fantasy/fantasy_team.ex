@@ -8,11 +8,6 @@ defmodule FantasyManager.Fantasy.FantasyTeam do
     repo FantasyManager.Repo
 
     references do
-      reference :fantasy_team_players, on_delete: :delete
-      reference :keeper_contracts, on_delete: :delete
-      reference :trade_proposals_sent, on_delete: :delete
-      reference :trade_proposals_received, on_delete: :delete
-      reference :recommendations, on_delete: :delete
     end
   end
 
@@ -98,32 +93,6 @@ defmodule FantasyManager.Fantasy.FantasyTeam do
     belongs_to :league, FantasyManager.Fantasy.League do
       source_attribute :league_id
       destination_attribute :id
-    end
-
-    has_many :fantasy_team_players, FantasyManager.Fantasy.FantasyTeamPlayer do
-      destination_attribute :fantasy_team_id
-    end
-
-    many_to_many :players, FantasyManager.Fantasy.Player do
-      through FantasyManager.Fantasy.FantasyTeamPlayer
-      source_attribute_on_join_resource :fantasy_team_id
-      destination_attribute_on_join_resource :player_id
-    end
-
-    has_many :keeper_contracts, FantasyManager.Fantasy.KeeperContract do
-      destination_attribute :fantasy_team_id
-    end
-
-    has_many :trade_proposals_sent, FantasyManager.Fantasy.TradeProposal do
-      destination_attribute :sender_team_id
-    end
-
-    has_many :trade_proposals_received, FantasyManager.Fantasy.TradeProposal do
-      destination_attribute :receiver_team_id
-    end
-
-    has_many :recommendations, FantasyManager.Fantasy.Recommendation do
-      destination_attribute :fantasy_team_id
     end
   end
 

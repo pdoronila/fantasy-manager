@@ -8,10 +8,7 @@ defmodule FantasyManager.Fantasy.Player do
     repo FantasyManager.Repo
 
     references do
-      reference :player_stats, on_delete: :delete
-      reference :fantasy_team_players, on_delete: :delete
       reference :projections, on_delete: :delete
-      reference :keeper_contracts, on_delete: :delete
     end
   end
 
@@ -81,19 +78,7 @@ defmodule FantasyManager.Fantasy.Player do
   end
 
   relationships do
-    has_many :player_stats, FantasyManager.Fantasy.PlayerStat do
-      destination_attribute :player_id
-    end
-
-    has_many :fantasy_team_players, FantasyManager.Fantasy.FantasyTeamPlayer do
-      destination_attribute :player_id
-    end
-
     has_many :projections, FantasyManager.Fantasy.WeeklyProjection do
-      destination_attribute :player_id
-    end
-
-    has_many :keeper_contracts, FantasyManager.Fantasy.KeeperContract do
       destination_attribute :player_id
     end
   end

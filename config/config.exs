@@ -77,7 +77,7 @@ config :fantasy_manager,
   save_ai_projections: true
 
 # Configure Tesla HTTP client
-config :tesla, adapter: Tesla.Adapter.Finch
+config :tesla, adapter: {Tesla.Adapter.Finch, name: FantasyManager.Finch}
 config :tesla, disable_deprecated_builder_warning: true
 
 # Configure Finch HTTP client
