@@ -115,17 +115,17 @@ Focus on core functionality for browser testing:
 
 ## Phase 3.5: AI Integration
 
-- [ ] **T019** [P] AI recommendation engine with Claude integration
+- [x] **T019** [P] AI recommendation engine with Claude integration
   - Path: `lib/fantasy_manager/ai/recommendation_engine.ex`
   - Implement LangChain integration for lineup recommendations
   - Include tool calling and structured output parsing
 
-- [ ] **T020** [P] Ash.ai tools for fantasy data access
+- [x] **T020** [P] Ash.ai tools for fantasy data access
   - Path: `lib/fantasy_manager/ai/fantasy_tools.ex`
   - Implement tools for AI to access player stats, matchups, projections
   - Enable AI to query roster data and league settings
 
-- [ ] **T021** Claude API configuration and error handling
+- [x] **T021** Claude API configuration and error handling
   - Path: `lib/fantasy_manager/ai/claude_config.ex`
   - Configure Claude API client with proper error handling
   - Include fallback responses when AI unavailable

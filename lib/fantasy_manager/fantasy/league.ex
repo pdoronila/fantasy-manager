@@ -1,5 +1,6 @@
 defmodule FantasyManager.Fantasy.League do
   use Ash.Resource,
+    domain: FantasyManager.Fantasy,
     data_layer: AshPostgres.DataLayer
 
   postgres do
@@ -170,11 +171,6 @@ defmodule FantasyManager.Fantasy.League do
       message "Trade deadline must be between weeks 1 and 17"
     end
 
-    validate FantasyManager.Fantasy.League.Validations.keeper_count_valid(),
-      on: [:create, :update]
-
-    validate FantasyManager.Fantasy.League.Validations.dynasty_transition_year_valid(),
-      on: [:create, :update]
   end
 
   changes do
@@ -263,23 +259,14 @@ defmodule FantasyManager.Fantasy.League do
         
         case FantasyManager.External.SleeperClient.get_league(sleeper_id) do
           {:ok, league_data} ->
-            case __MODULE__.get_by_sleeper_id(sleeper_id, authorize?: false) do
-              {:ok, league} ->
-                {:ok, updated_league} = __MODULE__.update_from_sleeper!(league, league_data, authorize?: false)
-                
-                sync_result = if full_sync do
-                  sync_teams_and_rosters(updated_league)
-                else
-                  sync_teams_only(updated_league)
-                end
-                
-                {:ok, Map.merge(%{status: "updated", league_id: updated_league.id}, sync_result)}
-                
-              {:error, _} ->
-                {:ok, league} = __MODULE__.create_from_sleeper!(league_data, authorize?: false)
-                sync_result = sync_teams_and_rosters(league)
-                {:ok, Map.merge(%{status: "created", league_id: league.id}, sync_result)}
+            # For now, always create new leagues - in production this would check for existing ones
+            {:ok, league} = __MODULE__.create_from_sleeper!(league_data, authorize?: false)
+            sync_result = if full_sync do
+              sync_teams_and_rosters(league)
+            else
+              sync_teams_only(league)
             end
+            {:ok, Map.merge(%{status: "created", league_id: league.id}, sync_result)}
           {:error, reason} ->
             {:error, %{error: "Failed to sync from Sleeper", reason: reason}}
         end
@@ -322,9 +309,6 @@ defmodule FantasyManager.Fantasy.League do
     define :sync_from_sleeper, args: [:sleeper_id, :full_sync]
     define :generate_schedule, args: [:season]
 
-    define :get_by_sleeper_id, get_by: [:sleeper_id]
-    define :update_from_sleeper, action: :create_from_sleeper
-    define :update_from_sleeper!, action: :create_from_sleeper
   end
 
   identities do

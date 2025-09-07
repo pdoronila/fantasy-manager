@@ -70,6 +70,12 @@ config :cachex, :default_ttl, :timer.hours(1)
 config :langchain, :openai_key, System.get_env("OPENAI_API_KEY")
 config :langchain, :anthropic_key, System.get_env("ANTHROPIC_API_KEY")
 
+# Configure Fantasy Manager AI integration
+config :fantasy_manager,
+  anthropic_api_key: System.get_env("ANTHROPIC_API_KEY"),
+  anthropic_base_url: "https://api.anthropic.com/v1",
+  save_ai_projections: true
+
 # Configure Tesla HTTP client
 config :tesla, adapter: Tesla.Adapter.Finch
 config :tesla, disable_deprecated_builder_warning: true

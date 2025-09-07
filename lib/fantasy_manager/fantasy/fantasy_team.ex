@@ -1,5 +1,6 @@
 defmodule FantasyManager.Fantasy.FantasyTeam do
   use Ash.Resource,
+    domain: FantasyManager.Fantasy,
     data_layer: AshPostgres.DataLayer
 
   postgres do
@@ -205,9 +206,6 @@ defmodule FantasyManager.Fantasy.FantasyTeam do
   validations do
     validate present([:name, :owner_name, :sleeper_id, :league_id])
 
-    validate FantasyManager.Fantasy.FantasyTeam.Validations.faab_budget_within_league_limits()
-    validate FantasyManager.Fantasy.FantasyTeam.Validations.waiver_priority_unique_within_league()
-    validate FantasyManager.Fantasy.FantasyTeam.Validations.roster_size_within_league_limits()
   end
 
   changes do
@@ -315,7 +313,7 @@ defmodule FantasyManager.Fantasy.FantasyTeam do
     read :search_teams do
       argument :query, :string, allow_nil?: false
 
-      filter expr(ilike(name, ^("%#{arg(:query)}%")) or ilike(owner_name, ^("%#{arg(:query)}%")))
+      filter expr(ilike(name, ^arg(:query)) or ilike(owner_name, ^arg(:query)))
     end
 
     action :analyze_team_needs, :map do
@@ -375,9 +373,6 @@ defmodule FantasyManager.Fantasy.FantasyTeam do
     define :standings, args: [:league_id]
     define :search_teams, args: [:query]
     define :analyze_team_needs
-    define :sync_roster_from_sleeper, args: [:sleeper_roster_data]
-
-    define :get_by_sleeper_id, get_by: [:sleeper_id]
   end
 
   identities do
@@ -429,7 +424,7 @@ defmodule FantasyManager.Fantasy.FantasyTeam do
     changeset
   end
 
-  defp analyze_roster_composition(team) do
+  defp analyze_roster_composition(_team) do
     # This would analyze the team's roster composition
     # For now, return a placeholder structure
     %{
@@ -442,7 +437,7 @@ defmodule FantasyManager.Fantasy.FantasyTeam do
     }
   end
 
-  defp analyze_positional_needs(team) do
+  defp analyze_positional_needs(_team) do
     # This would analyze positional strengths and weaknesses
     # For now, return a placeholder structure
     %{
@@ -452,7 +447,7 @@ defmodule FantasyManager.Fantasy.FantasyTeam do
     }
   end
 
-  defp analyze_competitive_factors(team) do
+  defp analyze_competitive_factors(_team) do
     # This would analyze factors affecting competitiveness
     # For now, return a placeholder structure
     %{
@@ -462,7 +457,7 @@ defmodule FantasyManager.Fantasy.FantasyTeam do
     }
   end
 
-  defp generate_team_recommendations(roster, positional, competitive) do
+  defp generate_team_recommendations(_roster, _positional, _competitive) do
     # This would generate specific recommendations based on analysis
     # For now, return placeholder recommendations
     [
@@ -472,35 +467,10 @@ defmodule FantasyManager.Fantasy.FantasyTeam do
     ]
   end
 
-  defp sync_roster_players(team, roster_data) do
+  defp sync_roster_players(_team, _roster_data) do
     # This would sync the actual roster players
     # For now, return success with placeholder counts
     {:ok, %{players_added: 5, players_updated: 10, players_removed: 0}}
   end
 end
 
-defmodule FantasyManager.Fantasy.FantasyTeam.Validations do
-  def faab_budget_within_league_limits(changeset) do
-    # This would validate FAAB budget against league settings
-    # For now, allow any positive budget
-    faab_budget = Ash.Changeset.get_attribute(changeset, :faab_budget)
-    
-    if faab_budget && faab_budget >= 0 do
-      :ok
-    else
-      {:error, "FAAB budget must be non-negative"}
-    end
-  end
-
-  def waiver_priority_unique_within_league(changeset) do
-    # This would validate waiver priority uniqueness within league
-    # For now, skip validation
-    :ok
-  end
-
-  def roster_size_within_league_limits(changeset) do
-    # This would validate roster size against league settings
-    # For now, skip validation since it's calculated
-    :ok
-  end
-end

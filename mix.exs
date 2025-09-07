@@ -78,7 +78,8 @@ defmodule FantasyManager.MixProject do
       {:finch, "~> 0.16"},
       {:cachex, "~> 3.4"},
       # Additional utility dependencies
-      {:hackney, "~> 1.18"}
+      {:hackney, "~> 1.18"},
+      {:httpoison, "~> 2.0"}
     ]
   end
 
