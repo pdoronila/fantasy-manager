@@ -39,32 +39,32 @@ Focus on core functionality for browser testing:
 
 **CRITICAL: These tests MUST be written and MUST FAIL before ANY implementation**
 
-- [ ] **T005** [P] Contract test for GET /api/v1/players
+- [x] **T005** [P] Contract test for GET /api/v1/players
   - Path: `test/fantasy_manager_web/controllers/players_api_test.exs`
   - Test JSON:API format, filtering, pagination from players-api.yaml
   - Must fail initially (no implementation exists)
 
-- [ ] **T006** [P] Contract test for POST /api/v1/lineups/optimize
+- [x] **T006** [P] Contract test for POST /api/v1/lineups/optimize
   - Path: `test/fantasy_manager_web/controllers/recommendations_api_test.exs`
   - Test lineup optimization endpoint from recommendations-api.yaml
   - Must fail initially (no implementation exists)
 
-- [ ] **T007** [P] Contract test for GET /api/v1/leagues/{id}
+- [x] **T007** [P] Contract test for GET /api/v1/leagues/{id}
   - Path: `test/fantasy_manager_web/controllers/leagues_api_test.exs`
   - Test league details endpoint from leagues-api.yaml
   - Must fail initially (no implementation exists)
 
-- [ ] **T008** [P] Integration test for Sleeper API client
+- [x] **T008** [P] Integration test for Sleeper API client
   - Path: `test/integration/sleeper_client_test.exs`
   - Test external API connection, caching, error handling
   - Use mock responses for predictable testing
 
-- [ ] **T009** [P] Integration test for AI recommendation flow
+- [x] **T009** [P] Integration test for AI recommendation flow
   - Path: `test/integration/ai_recommendations_test.exs`
   - Test Claude API integration, tool calling, response formatting
   - Mock LangChain responses for deterministic tests
 
-- [ ] **T010** [P] Browser integration test for core user journey
+- [x] **T010** [P] Browser integration test for core user journey
   - Path: `test/fantasy_manager_web/integration/user_journey_test.exs`
   - Test: Create league → View players → Get recommendations
   - Use Phoenix LiveView testing capabilities
