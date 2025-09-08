@@ -1,0 +1,509 @@
+defmodule FantasyManager.Fantasy.FantasyTeam do
+  use Ash.Resource,
+    domain: FantasyManager.Fantasy,
+    data_layer: AshPostgres.DataLayer
+
+  postgres do
+    table "fantasy_teams"
+    repo FantasyManager.Repo
+
+    references do
+    end
+  end
+
+  attributes do
+    uuid_primary_key :id
+
+    attribute :sleeper_id, :string do
+      allow_nil? false
+      constraints [match: ~r/^[0-9]+$/]
+    end
+
+    attribute :name, :string do
+      allow_nil? false
+      constraints [min_length: 1, max_length: 50]
+    end
+
+    attribute :owner_name, :string do
+      allow_nil? false
+      constraints [min_length: 1, max_length: 50]
+    end
+
+    attribute :competitive_window, :atom do
+      allow_nil? false
+      default :Neutral
+      constraints [one_of: [:Contending, :Rebuilding, :Neutral]]
+    end
+
+    attribute :waiver_priority, :integer do
+      allow_nil? true
+      constraints [min: 1, max: 20]
+    end
+
+    attribute :faab_budget, :integer do
+      allow_nil? false
+      default 100
+      constraints [min: 0, max: 1000]
+    end
+
+    attribute :total_moves, :integer do
+      allow_nil? false
+      default 0
+      constraints [min: 0]
+    end
+
+    attribute :wins, :integer do
+      allow_nil? false
+      default 0
+      constraints [min: 0]
+    end
+
+    attribute :losses, :integer do
+      allow_nil? false
+      default 0
+      constraints [min: 0]
+    end
+
+    attribute :ties, :integer do
+      allow_nil? false
+      default 0
+      constraints [min: 0]
+    end
+
+    attribute :points_for, :decimal do
+      allow_nil? false
+      default 0.0
+      constraints [min: 0.0]
+    end
+
+    attribute :points_against, :decimal do
+      allow_nil? false
+      default 0.0
+      constraints [min: 0.0]
+    end
+
+    attribute :league_id, :uuid do
+      allow_nil? false
+    end
+
+    timestamps()
+  end
+
+  relationships do
+    belongs_to :league, FantasyManager.Fantasy.League do
+      source_attribute :league_id
+      destination_attribute :id
+    end
+
+    has_many :fantasy_team_players, FantasyManager.Fantasy.FantasyTeamPlayer do
+      source_attribute :id
+      destination_attribute :fantasy_team_id
+    end
+
+    many_to_many :roster_players, FantasyManager.Fantasy.Player do
+      through FantasyManager.Fantasy.FantasyTeamPlayer
+      source_attribute_on_join_resource :fantasy_team_id
+      destination_attribute_on_join_resource :player_id
+    end
+  end
+
+  calculations do
+    calculate :win_percentage, :decimal, expr(
+      cond do
+        wins + losses + ties == 0 -> 0.0
+        true -> wins / (wins + losses + ties)
+      end
+    )
+
+    calculate :points_difference, :decimal, expr(
+      points_for - points_against
+    )
+
+    calculate :roster_size, :integer, expr(
+      fragment("SELECT COUNT(*) FROM fantasy_team_players WHERE fantasy_team_id = ? AND roster_position != 'Dropped'", [id])
+    )
+
+    calculate :active_roster_size, :integer, expr(
+      fragment("SELECT COUNT(*) FROM fantasy_team_players WHERE fantasy_team_id = ? AND roster_position IN ('Starter', 'Bench')", [id])
+    )
+
+    calculate :bench_size, :integer, expr(
+      fragment("SELECT COUNT(*) FROM fantasy_team_players WHERE fantasy_team_id = ? AND roster_position = 'Bench'", [id])
+    )
+
+    calculate :ir_count, :integer, expr(
+      fragment("SELECT COUNT(*) FROM fantasy_team_players WHERE fantasy_team_id = ? AND roster_position = 'IR'", [id])
+    )
+
+    calculate :taxi_count, :integer, expr(
+      fragment("SELECT COUNT(*) FROM fantasy_team_players WHERE fantasy_team_id = ? AND roster_position = 'Taxi'", [id])
+    )
+
+    calculate :average_age, :decimal, expr(
+      fragment("
+        SELECT COALESCE(AVG(p.age), 0) 
+        FROM fantasy_team_players ftp 
+        JOIN players p ON ftp.player_id = p.id 
+        WHERE ftp.fantasy_team_id = ? AND ftp.roster_position != 'Dropped' AND p.age IS NOT NULL
+      ", [id])
+    )
+
+    calculate :positional_needs, {:array, :atom}, expr(
+      fragment("
+        SELECT ARRAY(
+          SELECT unnest(ARRAY['QB', 'RB', 'WR', 'TE', 'K', 'DEF']) 
+          EXCEPT 
+          SELECT DISTINCT p.position 
+          FROM fantasy_team_players ftp 
+          JOIN players p ON ftp.player_id = p.id 
+          WHERE ftp.fantasy_team_id = ? AND ftp.roster_position IN ('Starter', 'Bench')
+        )
+      ", [id])
+    )
+
+    calculate :keeper_eligible_count, :integer, expr(
+      fragment("
+        SELECT COUNT(*) 
+        FROM fantasy_team_players ftp 
+        JOIN players p ON ftp.player_id = p.id 
+        WHERE ftp.fantasy_team_id = ? AND p.keeper_eligible = true AND ftp.roster_position != 'Dropped'
+      ", [id])
+    )
+
+    calculate :projected_lineup_points, :decimal, expr(
+      fragment("
+        SELECT COALESCE(SUM(wp.projected_points), 0)
+        FROM fantasy_team_players ftp
+        JOIN players p ON ftp.player_id = p.id
+        LEFT JOIN weekly_projections wp ON p.id = wp.player_id 
+          AND wp.season = EXTRACT(year FROM now())
+          AND wp.week = (SELECT MAX(week) FROM weekly_projections WHERE season = EXTRACT(year FROM now()))
+        WHERE ftp.fantasy_team_id = ? AND ftp.roster_position = 'Starter'
+      ", [id])
+    )
+  end
+
+  validations do
+    validate present([:name, :owner_name, :sleeper_id, :league_id])
+
+  end
+
+  changes do
+    change after_action(&sync_roster_from_sleeper/3) do
+      on [:create]
+    end
+
+    change before_action(&calculate_competitive_window/2),
+      on: [:create, :update]
+
+    change after_action(&update_league_standings/3),
+      on: [:update]
+  end
+
+  actions do
+    defaults [:create, :read, :update, :destroy]
+
+    create :create_from_sleeper do
+      argument :sleeper_data, :map, allow_nil?: false
+      argument :user_data, :map, allow_nil?: false
+      argument :league_id, :uuid, allow_nil?: false
+      
+      change fn changeset, context ->
+        sleeper_data = Ash.Changeset.get_argument(changeset, :sleeper_data)
+        user_data = Ash.Changeset.get_argument(changeset, :user_data)
+        league_id = Ash.Changeset.get_argument(changeset, :league_id)
+        
+        changeset
+        |> Ash.Changeset.change_attribute(:sleeper_id, to_string(sleeper_data["roster_id"]))
+        |> Ash.Changeset.change_attribute(:name, user_data["display_name"] || user_data["username"])
+        |> Ash.Changeset.change_attribute(:owner_name, user_data["display_name"] || user_data["username"])
+        |> Ash.Changeset.change_attribute(:league_id, league_id)
+        |> Ash.Changeset.change_attribute(:wins, sleeper_data["settings"]["wins"] || 0)
+        |> Ash.Changeset.change_attribute(:losses, sleeper_data["settings"]["losses"] || 0)
+        |> Ash.Changeset.change_attribute(:ties, sleeper_data["settings"]["ties"] || 0)
+        |> Ash.Changeset.change_attribute(:points_for, Decimal.new(sleeper_data["settings"]["fpts"] || "0"))
+        |> Ash.Changeset.change_attribute(:points_against, Decimal.new(sleeper_data["settings"]["fpts_against"] || "0"))
+        |> Ash.Changeset.change_attribute(:waiver_priority, sleeper_data["settings"]["waiver_position"])
+        |> Ash.Changeset.change_attribute(:faab_budget, sleeper_data["settings"]["waiver_budget_used"] || 100)
+        |> Ash.Changeset.change_attribute(:total_moves, sleeper_data["settings"]["total_moves"] || 0)
+      end
+    end
+
+    update :update_competitive_window do
+      argument :window, :atom, allow_nil?: false
+
+      validate attribute_in(:window, [:Contending, :Rebuilding, :Neutral])
+
+      change set_attribute(:competitive_window, arg(:window))
+    end
+
+    update :update_record do
+      argument :wins, :integer
+      argument :losses, :integer
+      argument :ties, :integer
+      argument :points_for, :decimal
+      argument :points_against, :decimal
+
+      change set_attribute(:wins, arg(:wins))
+      change set_attribute(:losses, arg(:losses))
+      change set_attribute(:ties, arg(:ties))
+      change set_attribute(:points_for, arg(:points_for))
+      change set_attribute(:points_against, arg(:points_against))
+    end
+
+    update :make_waiver_claim do
+      argument :player_id, :uuid, allow_nil?: false
+      argument :drop_player_id, :uuid
+      argument :bid_amount, :integer, allow_nil?: false
+
+      validate compare(:bid_amount, greater_than: 0, less_than_or_equal_to: expr(faab_budget))
+
+      change fn changeset, context ->
+        bid_amount = Ash.Changeset.get_argument(changeset, :bid_amount)
+        current_budget = Ash.Changeset.get_data(changeset).faab_budget
+        
+        Ash.Changeset.change_attribute(changeset, :faab_budget, current_budget - bid_amount)
+      end
+    end
+
+    read :in_league do
+      argument :league_id, :uuid, allow_nil?: false
+
+      filter expr(league_id == ^arg(:league_id))
+    end
+
+    read :by_competitive_window do
+      argument :window, :atom, allow_nil?: false
+
+      filter expr(competitive_window == ^arg(:window))
+    end
+
+    read :playoff_contenders do
+      argument :league_id, :uuid, allow_nil?: false
+
+      filter expr(league_id == ^arg(:league_id))
+    end
+
+    read :standings do
+      argument :league_id, :uuid, allow_nil?: false
+
+      filter expr(league_id == ^arg(:league_id))
+    end
+
+    read :by_league do
+      argument :league_id, :uuid, allow_nil?: false
+
+      filter expr(league_id == ^arg(:league_id))
+    end
+
+    read :search_teams do
+      argument :query, :string, allow_nil?: false
+
+      filter expr(ilike(name, ^arg(:query)) or ilike(owner_name, ^arg(:query)))
+    end
+
+    action :analyze_team_needs, :map do
+      run fn input, context ->
+        team = context.resource
+        
+        # Get current roster composition
+        roster_analysis = analyze_roster_composition(team)
+        
+        # Calculate positional strengths and needs
+        positional_analysis = analyze_positional_needs(team)
+        
+        # Determine competitive window factors
+        competitive_analysis = analyze_competitive_factors(team)
+        
+        {:ok, %{
+          roster_composition: roster_analysis,
+          positional_strength: positional_analysis.strengths,
+          positional_needs: positional_analysis.needs,
+          competitive_window: team.competitive_window,
+          recommendations: generate_team_recommendations(roster_analysis, positional_analysis, competitive_analysis)
+        }}
+      end
+    end
+
+    action :sync_roster_from_sleeper, :map do
+      argument :sleeper_roster_data, :map, allow_nil?: false
+
+      run fn input, context ->
+        team = context.resource
+        roster_data = input.arguments.sleeper_roster_data
+        
+        case sync_roster_players(team, roster_data) do
+          {:ok, sync_results} ->
+            {:ok, sync_results}
+          {:error, reason} ->
+            {:error, %{error: "Failed to sync roster", reason: reason}}
+        end
+      end
+    end
+  end
+
+  code_interface do
+    domain FantasyManager.Fantasy
+
+    define :create
+    define :read
+    define :update
+    define :destroy
+    define :create_from_sleeper, args: [:sleeper_data, :user_data, :league_id]
+    define :update_competitive_window, args: [:window]
+    define :update_record, args: [:wins, :losses, :ties, :points_for, :points_against]
+    define :make_waiver_claim, args: [:player_id, :drop_player_id, :bid_amount]
+    define :in_league, args: [:league_id]
+    define :by_competitive_window, args: [:window]
+    define :playoff_contenders, args: [:league_id]
+    define :standings, args: [:league_id]
+    define :by_league, args: [:league_id]
+    define :search_teams, args: [:query]
+    define :analyze_team_needs
+  end
+
+  identities do
+    identity :unique_sleeper_id_league, [:sleeper_id, :league_id]
+  end
+
+  # Helper functions
+  defp sync_roster_from_sleeper(changeset, team, _context) do
+    sleeper_id = team.sleeper_id
+    
+    # Load the league relationship to access sleeper_id
+    team_with_league = team |> Ash.load!(:league)
+    
+    case FantasyManager.External.SleeperClient.get_league_rosters(team_with_league.league.sleeper_id) do
+      {:ok, rosters} ->
+        team_roster = Enum.find(rosters, &(&1["roster_id"] == sleeper_id))
+        if team_roster do
+          sync_roster_players(team, team_roster)
+        end
+      {:error, _} ->
+        # Log error but don't fail team creation
+        :ok
+    end
+    
+    {:ok, team}
+  end
+
+  defp calculate_competitive_window(changeset, _context) do
+    wins = Ash.Changeset.get_attribute(changeset, :wins)
+    losses = Ash.Changeset.get_attribute(changeset, :losses)
+    points_for = Ash.Changeset.get_attribute(changeset, :points_for)
+    
+    if wins && losses && points_for do
+      total_games = wins + losses
+      win_pct = if total_games > 0, do: wins / total_games, else: 0.0
+      
+      window = cond do
+        win_pct >= 0.7 and Decimal.to_float(points_for) >= 1200 -> :Contending
+        win_pct <= 0.3 and total_games >= 6 -> :Rebuilding
+        true -> :Neutral
+      end
+      
+      Ash.Changeset.change_attribute(changeset, :competitive_window, window)
+    else
+      changeset
+    end
+  end
+
+  defp update_league_standings(changeset, team, _context) do
+    # This would trigger a background job to recalculate league standings
+    # For now, just return the team
+    {:ok, team}
+  end
+
+  defp analyze_roster_composition(_team) do
+    # This would analyze the team's roster composition
+    # For now, return a placeholder structure
+    %{
+      total_players: 16,
+      starters: 9,
+      bench: 6,
+      ir: 1,
+      avg_age: 26.5,
+      positions: %{QB: 2, RB: 4, WR: 5, TE: 3, K: 1, DEF: 1}
+    }
+  end
+
+  defp analyze_positional_needs(_team) do
+    # This would analyze positional strengths and weaknesses
+    # For now, return a placeholder structure
+    %{
+      strengths: %{QB: 85, WR: 78},
+      needs: [:RB, :TE],
+      depth_chart: %{}
+    }
+  end
+
+  defp analyze_competitive_factors(_team) do
+    # This would analyze factors affecting competitiveness
+    # For now, return a placeholder structure
+    %{
+      age_curve: :stable,
+      injury_risk: :medium,
+      schedule_strength: :average
+    }
+  end
+
+  defp generate_team_recommendations(_roster, _positional, _competitive) do
+    # This would generate specific recommendations based on analysis
+    # For now, return placeholder recommendations
+    [
+      "Consider upgrading at RB position",
+      "Strong at WR, potential trade asset",
+      "Monitor injury status of key players"
+    ]
+  end
+
+  defp sync_roster_players(team, roster_data) do
+    alias FantasyManager.Fantasy.{Player, FantasyTeamPlayer}
+    
+    # Get player IDs from the roster
+    player_ids = roster_data["players"] || []
+    starters = roster_data["starters"] || []
+    
+    # Clear existing roster  
+    {:ok, existing_players} = FantasyTeamPlayer.by_team(team.id)
+    for existing <- existing_players do
+      FantasyTeamPlayer.destroy!(existing)
+    end
+    
+    players_added = 0
+    
+    # Add current roster players
+    players_added = 
+      player_ids
+      |> Enum.reduce(0, fn sleeper_player_id, acc ->
+        case Player.by_sleeper_id(sleeper_player_id) do
+          {:ok, []} -> 
+            # Player doesn't exist in our system, skip for now
+            acc
+          {:ok, [player | _]} ->
+            roster_position = if sleeper_player_id in starters do
+              :Starter 
+            else 
+              :Bench
+            end
+            
+            case FantasyTeamPlayer.create(%{
+              fantasy_team_id: team.id,
+              player_id: player.id,
+              roster_position: roster_position,
+              acquisition_date: Date.utc_today(),
+              acquisition_type: :Draft
+            }) do
+              {:ok, _} -> acc + 1
+              {:error, _} -> acc
+            end
+        end
+      end)
+    
+    {:ok, %{players_added: players_added, players_updated: 0, players_removed: length(existing_players)}}
+  rescue 
+    error ->
+      {:error, error}
+  end
+end
+

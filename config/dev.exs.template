@@ -1,0 +1,65 @@
+# Fantasy Manager Development Configuration Template
+# This file shows the structure of dev.exs with environment variable placeholders
+# Copy to config/dev.exs and set your environment variables
+
+import Config
+
+# Configure your database
+config :fantasy_manager, FantasyManager.Repo,
+  username: "${DB_USERNAME:-postgres}",
+  password: "${DB_PASSWORD:-postgres}",
+  hostname: "${DB_HOSTNAME:-localhost}",
+  database: "${DB_NAME:-fantasy_manager_dev}",
+  stacktrace: true,
+  show_sensitive_data_on_connection_error: true,
+  pool_size: "${DB_POOL_SIZE:-10}"
+
+# Phoenix Endpoint Configuration
+config :fantasy_manager, FantasyManagerWeb.Endpoint,
+  http: [ip: {127, 0, 0, 1}, port: "${PORT:-4000}"],
+  check_origin: false,
+  code_reloader: true,
+  debug_errors: true,
+  secret_key_base: "${SECRET_KEY_BASE}",
+  watchers: [
+    esbuild: {Esbuild, :install_and_run, [:fantasy_manager, ~w(--sourcemap=inline --watch)]},
+    tailwind: {Tailwind, :install_and_run, [:fantasy_manager, ~w(--watch)]}
+  ]
+
+# External API Configuration
+config :fantasy_manager, FantasyManager.External.SleeperClient,
+  base_url: "${SLEEPER_BASE_URL:-https://api.sleeper.app/v1}",
+  request_timeout: "${SLEEPER_TIMEOUT:-30000}",
+  rate_limit: [
+    requests: "${SLEEPER_RATE_LIMIT:-1000}",
+    per: :timer.hours(1)
+  ]
+
+# AI Configuration (Ash.ai Integration)
+config :ash, :ai,
+  default_model: :claude_3_5_sonnet,
+  api_key: "${ANTHROPIC_API_KEY}"
+
+config :fantasy_manager, FantasyManager.AI.RecommendationEngine,
+  model: :claude_3_5_sonnet,
+  temperature: "${AI_TEMPERATURE:-0.1}",
+  max_tokens: "${AI_MAX_TOKENS:-2000}",
+  timeout: "${AI_TIMEOUT_SECONDS:-60}" |> String.to_integer() |> then(&(&1 * 1000))
+
+# Cache Configuration (Cachex)
+config :fantasy_manager, FantasyManager.Cache,
+  default: [
+    limit: "${CACHE_DEFAULT_LIMIT:-2500}",
+    stats: true
+  ],
+  sleeper: [
+    limit: "${SLEEPER_CACHE_LIMIT:-1000}",
+    ttl: :timer.hours("${SLEEPER_CACHE_TTL_HOURS:-1}" |> String.to_integer()),
+    stats: true
+  ]
+
+# Enable dev routes for dashboard and mailbox
+config :fantasy_manager, dev_routes: true
+
+# Set up Ash domain configuration
+config :fantasy_manager, ash_domains: [FantasyManager.Fantasy]
