@@ -345,7 +345,7 @@ defmodule FantasyManager.AI.ClaudeCode do
     player_list = players
     |> Enum.take(10) # Limit to avoid huge context
     |> Enum.map(fn player -> 
-      "- #{player.name} (#{player.position}) - #{player.team || "Free Agent"}"
+      "- #{player.name} (#{player.position}) - #{player.nfl_team || "Free Agent"}"
     end)
     |> Enum.join("\n")
     

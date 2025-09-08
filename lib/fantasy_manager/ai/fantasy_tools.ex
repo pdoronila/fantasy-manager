@@ -625,10 +625,25 @@ defmodule FantasyManager.AI.FantasyTools do
       }
     end)
     
+    # Extract all players for the detailed roster view
+    detailed_roster = team_with_players.fantasy_team_players
+    |> Enum.filter(fn team_player -> 
+      not is_struct(team_player.player, Ash.NotLoaded)
+    end)
+    |> Enum.map(fn team_player ->
+      %{
+        name: team_player.player.name,
+        position: team_player.player.position,
+        id: team_player.player.id,
+        nfl_team: team_player.player.nfl_team || "FA"
+      }
+    end)
+    
     %{
       team_id: team_with_players.id,
       position_analysis: position_needs,
-      overall_needs: identify_priority_needs(position_needs)
+      overall_needs: identify_priority_needs(position_needs),
+      detailed_roster: detailed_roster
     }
   end
   
@@ -754,7 +769,7 @@ defmodule FantasyManager.AI.FantasyTools do
       id: player.id,
       name: player.name,
       position: player.position,
-      team: player.team,
+      team: player.nfl_team,
       stats: Enum.map(player.player_stats || [], fn stat ->
         %{
           week: Map.get(stat, :week),

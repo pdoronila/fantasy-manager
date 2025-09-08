@@ -376,7 +376,7 @@ defmodule FantasyManager.AI.RecommendationEngine do
     - Player name, position, NFL team
     - Priority score (1-10, where 10 is must-add)
     - Detailed reasoning (2-3 sentences)
-    - Suggested drop candidate (if applicable)
+    - Specific drop candidate from current roster (required - analyze the current roster and suggest which specific player to drop)
     - Urgency level (low/medium/high/critical)
     
     Focus on actionable recommendations that maximize team improvement while considering waiver priority and league context.
@@ -837,9 +837,24 @@ defmodule FantasyManager.AI.RecommendationEngine do
     critical_needs = roster_analysis.overall_needs.critical_positions
     depth_needs = roster_analysis.overall_needs.depth_positions
     
+    # Include actual player names by position for drop recommendations
+    roster_details = if roster_analysis[:detailed_roster] do
+      roster_by_position = roster_analysis.detailed_roster
+      |> Enum.group_by(fn p -> p.position end)
+      |> Enum.map(fn {position, players} ->
+        player_names = Enum.map(players, fn p -> p.name end) |> Enum.join(", ")
+        "#{position}: #{player_names}"
+      end)
+      |> Enum.join("\n")
+      
+      "\n\nCurrent Roster Players:\n#{roster_by_position}"
+    else
+      ""
+    end
+    
     """
     Current Roster:
-    #{Enum.join(position_summaries, "\n")}
+    #{Enum.join(position_summaries, "\n")}#{roster_details}
     
     Critical Needs: #{if length(critical_needs) > 0, do: Enum.join(critical_needs, ", "), else: "None"}
     Depth Needs: #{if length(depth_needs) > 0, do: Enum.join(depth_needs, ", "), else: "None"}
@@ -1472,7 +1487,7 @@ defmodule FantasyManager.AI.RecommendationEngine do
         player_id: player.player_id,
         player_name: player.player_name,
         position: player.position,
-        team: player.team,
+        team: player.nfl_team,
         recommendation_type: "pickup",
         priority_score: 10 - index,
         reasoning: create_fallback_reasoning(player, priority, roster_analysis),
