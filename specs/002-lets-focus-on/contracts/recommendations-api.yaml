@@ -1,0 +1,487 @@
+openapi: 3.0.3
+info:
+  title: Free Agent Pickup Recommendations API
+  description: API for AI-powered fantasy football waiver wire pickup recommendations
+  version: 1.0.0
+  contact:
+    name: Fantasy Manager API
+    
+servers:
+  - url: http://localhost:4000/api/v1
+    description: Development server
+    
+security:
+  - BearerAuth: []
+
+paths:
+  /teams/{team_id}/recommendations:
+    get:
+      summary: Get free agent pickup recommendations for a team
+      description: |
+        Analyzes team roster weaknesses and generates AI-powered recommendations 
+        for free agents to pick up during waiver period. Considers trending players,
+        positional needs, and upcoming matchups.
+      operationId: getPickupRecommendations
+      tags:
+        - Recommendations
+      parameters:
+        - name: team_id
+          in: path
+          required: true
+          description: Fantasy team ID to generate recommendations for
+          schema:
+            type: string
+            format: uuid
+            example: "123e4567-e89b-12d3-a456-426614174000"
+        - name: week
+          in: query
+          required: false
+          description: Target fantasy week (defaults to current week)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 18
+            example: 8
+        - name: season
+          in: query
+          required: false  
+          description: Target fantasy season (defaults to current season)
+          schema:
+            type: integer
+            minimum: 2024
+            example: 2024
+        - name: position_filter
+          in: query
+          required: false
+          description: Filter recommendations by position
+          schema:
+            type: array
+            items:
+              type: string
+              enum: [QB, RB, WR, TE, K, DEF]
+            example: ["WR", "RB"]
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of recommendations to return
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 20
+            default: 10
+            example: 5
+        - name: refresh
+          in: query
+          required: false
+          description: Force refresh of cached recommendations
+          schema:
+            type: boolean
+            default: false
+            example: false
+      responses:
+        '200':
+          description: Successful response with pickup recommendations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecommendationResponse'
+              example:
+                team_id: "123e4567-e89b-12d3-a456-426614174000"
+                week: 8
+                season: 2024
+                generated_at: "2024-10-25T14:30:00Z"
+                expires_at: "2024-10-25T15:00:00Z"
+                recommendations:
+                  - id: "rec_001"
+                    player:
+                      id: "4046"
+                      name: "Jaylen Warren"
+                      position: "RB"
+                      nfl_team: "PIT"
+                      status: "Active"
+                    priority_score: 8.5
+                    confidence_level: 0.87
+                    reasoning: "Strong handcuff with RB1 upside if starter injured. Trending up with 15% roster adds this week."
+                    estimated_points_gain: 4.2
+                    recommendation_factors:
+                      trending_adds: 156
+                      position_need_score: 7.8
+                      matchup_quality: 8.2
+                      opportunity_score: 6.9
+                    drop_candidate:
+                      id: "2319"
+                      name: "Bench Player" 
+                      position: "WR"
+                      reasoning: "Underperforming with difficult upcoming schedule"
+                roster_analysis:
+                  weakness_scores:
+                    QB: 2.1
+                    RB: 8.7
+                    WR: 4.3
+                    TE: 3.2
+                    K: 1.5
+                    DEF: 2.8
+                  priority_positions: ["RB", "WR"]
+                  bench_depth_issues: ["RB"]
+        '400':
+          description: Bad request - invalid parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "validation_failed"
+                message: "Invalid week parameter: must be between 1 and 18"
+                details:
+                  field: "week"
+                  value: 25
+        '404':
+          description: Team not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "team_not_found"
+                message: "Fantasy team not found"
+                details:
+                  team_id: "123e4567-e89b-12d3-a456-426614174000"
+        '429':
+          description: Too many requests - rate limited
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "rate_limited"
+                message: "Too many recommendation requests. Please try again in 1 minute."
+                retry_after: 60
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "ai_service_unavailable"
+                message: "AI recommendation service is temporarily unavailable. Please try again later."
+                
+  /teams/{team_id}/recommendations/{recommendation_id}/status:
+    patch:
+      summary: Update recommendation status
+      description: |
+        Mark a recommendation as executed, dismissed, or reactivate it.
+        Used for tracking user actions and improving recommendation quality.
+      operationId: updateRecommendationStatus
+      tags:
+        - Recommendations
+      parameters:
+        - name: team_id
+          in: path
+          required: true
+          description: Fantasy team ID
+          schema:
+            type: string
+            format: uuid
+        - name: recommendation_id
+          in: path
+          required: true
+          description: Recommendation ID to update
+          schema:
+            type: string
+            example: "rec_001"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  type: string
+                  enum: [active, executed, dismissed, expired]
+                  description: New status for the recommendation
+                notes:
+                  type: string
+                  description: Optional notes about why status was changed
+                  maxLength: 500
+              example:
+                status: "executed"
+                notes: "Successfully picked up player during waivers"
+      responses:
+        '200':
+          description: Status updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    example: "rec_001"
+                  status:
+                    type: string
+                    example: "executed"
+                  updated_at:
+                    type: string
+                    format: date-time
+                    example: "2024-10-25T15:30:00Z"
+        '400':
+          description: Invalid status transition
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Recommendation not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token for user authentication
+      
+  schemas:
+    RecommendationResponse:
+      type: object
+      required:
+        - team_id
+        - week 
+        - season
+        - generated_at
+        - expires_at
+        - recommendations
+        - roster_analysis
+      properties:
+        team_id:
+          type: string
+          format: uuid
+          description: Fantasy team ID these recommendations are for
+        week:
+          type: integer
+          minimum: 1
+          maximum: 18
+          description: Fantasy week for recommendations
+        season:
+          type: integer
+          minimum: 2024
+          description: Fantasy season year
+        generated_at:
+          type: string
+          format: date-time
+          description: When recommendations were generated
+        expires_at:
+          type: string
+          format: date-time
+          description: When recommendations become stale
+        recommendations:
+          type: array
+          items:
+            $ref: '#/components/schemas/Recommendation'
+          description: List of pickup recommendations ordered by priority
+        roster_analysis:
+          $ref: '#/components/schemas/RosterAnalysis'
+          
+    Recommendation:
+      type: object
+      required:
+        - id
+        - player
+        - priority_score
+        - confidence_level
+        - reasoning
+        - recommendation_factors
+      properties:
+        id:
+          type: string
+          description: Unique recommendation identifier
+          example: "rec_001"
+        player:
+          $ref: '#/components/schemas/PlayerInfo'
+        priority_score:
+          type: number
+          format: float
+          minimum: 1.0
+          maximum: 10.0
+          description: Recommendation strength (1=low, 10=must-have)
+          example: 8.5
+        confidence_level:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+          description: AI confidence in recommendation (0.0-1.0)
+          example: 0.87
+        reasoning:
+          type: string
+          minLength: 10
+          description: Human-readable explanation for recommendation
+          example: "Strong handcuff with RB1 upside if starter injured"
+        estimated_points_gain:
+          type: number
+          format: float
+          description: Estimated weekly points improvement
+          example: 4.2
+          nullable: true
+        recommendation_factors:
+          type: object
+          description: Structured factors that influenced recommendation
+          properties:
+            trending_adds:
+              type: integer
+              description: Number of recent adds across all leagues
+            position_need_score:
+              type: number
+              format: float
+              description: How badly this position is needed (1-10)
+            matchup_quality:
+              type: number
+              format: float
+              description: Upcoming matchup favorability (1-10)
+            opportunity_score:
+              type: number
+              format: float
+              description: Player opportunity indicators (1-10)
+        drop_candidate:
+          allOf:
+            - $ref: '#/components/schemas/PlayerInfo'
+            - type: object
+              properties:
+                reasoning:
+                  type: string
+                  description: Why this player should be dropped
+          nullable: true
+          
+    PlayerInfo:
+      type: object
+      required:
+        - id
+        - name
+        - position
+        - nfl_team
+        - status
+      properties:
+        id:
+          type: string
+          description: Sleeper player ID
+          example: "4046"
+        name:
+          type: string
+          description: Player full name
+          example: "Jaylen Warren"
+        position:
+          type: string
+          enum: [QB, RB, WR, TE, K, DEF]
+          description: Primary fantasy position
+          example: "RB"
+        nfl_team:
+          type: string
+          description: NFL team abbreviation
+          example: "PIT"
+          nullable: true
+        status:
+          type: string
+          description: Player status
+          example: "Active"
+        depth_chart_position:
+          type: string
+          description: Position on NFL team depth chart
+          example: "RB2"
+          nullable: true
+          
+    RosterAnalysis:
+      type: object
+      required:
+        - weakness_scores
+        - priority_positions
+      properties:
+        weakness_scores:
+          type: object
+          description: Weakness score by position (0=strong, 10=very weak)
+          properties:
+            QB:
+              type: number
+              format: float
+              minimum: 0.0
+              maximum: 10.0
+            RB:
+              type: number
+              format: float
+              minimum: 0.0
+              maximum: 10.0
+            WR:
+              type: number
+              format: float
+              minimum: 0.0
+              maximum: 10.0
+            TE:
+              type: number
+              format: float
+              minimum: 0.0
+              maximum: 10.0
+            K:
+              type: number
+              format: float
+              minimum: 0.0
+              maximum: 10.0
+            DEF:
+              type: number
+              format: float
+              minimum: 0.0
+              maximum: 10.0
+          example:
+            QB: 2.1
+            RB: 8.7
+            WR: 4.3
+            TE: 3.2
+            K: 1.5
+            DEF: 2.8
+        priority_positions:
+          type: array
+          items:
+            type: string
+            enum: [QB, RB, WR, TE, K, DEF]
+          description: Positions needing immediate attention (ordered by priority)
+          example: ["RB", "WR"]
+        bench_depth_issues:
+          type: array
+          items:
+            type: string
+            enum: [QB, RB, WR, TE, K, DEF]
+          description: Positions with poor bench depth
+          example: ["RB"]
+          
+    ErrorResponse:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          description: Error code identifier
+          example: "validation_failed"
+        message:
+          type: string
+          description: Human-readable error message
+          example: "Invalid request parameters"
+        details:
+          type: object
+          description: Additional error context
+          additionalProperties: true
+        retry_after:
+          type: integer
+          description: Seconds to wait before retrying (for rate limiting)
+          example: 60
+
+tags:
+  - name: Recommendations
+    description: AI-powered pickup recommendations for fantasy football teams

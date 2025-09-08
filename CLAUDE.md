@@ -1,6 +1,6 @@
 # Fantasy Manager Development Guidelines
 
-Auto-generated from all feature plans. Last updated: 2025-09-07
+Auto-generated from all feature plans. Last updated: 2025-09-08
 
 ## Active Technologies
 - **Elixir 1.15+** with Phoenix v1.8.1 (001-build-an-application)
@@ -43,10 +43,12 @@ mix test --include integration # Include integration tests
 
 # External API clients
 mix run -e "FantasyManager.External.SleeperClient.get_all_players()"
+mix run -e "FantasyManager.External.SleeperClient.get_trending_players(\"add\")"
 mix run -e "FantasyManager.Tasks.SyncLeague.run(\"sleeper_league_id\")"
 
-# AI testing
+# AI testing and recommendations
 mix run -e "FantasyManager.AI.RecommendationEngine.test_connection()"
+mix run -e "FantasyManager.AI.RecommendationEngine.get_waiver_recommendations(team_id, 8, 2024)"
 ```
 
 ## Code Style
@@ -57,9 +59,9 @@ mix run -e "FantasyManager.AI.RecommendationEngine.test_connection()"
 - **Testing**: TDD approach with contract tests for API compatibility
 
 ## Recent Changes
+- 002-lets-focus-on: Added AI-powered free agent pickup recommendations with Sleeper API trending data integration
 - 001-build-an-application: Added Elixir/Phoenix with Ash framework for fantasy football management system
 - 001-build-an-application: Integrated Ash.ai for Claude-powered recommendations
-- 001-build-an-application: Implemented multi-level caching strategy for external APIs
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->

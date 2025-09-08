@@ -1,0 +1,588 @@
+openapi: 3.0.3
+info:
+  title: Trending Players API
+  description: Internal API for accessing and managing trending player data from Sleeper API
+  version: 1.0.0
+  contact:
+    name: Fantasy Manager API
+    
+servers:
+  - url: http://localhost:4000/api/v1
+    description: Development server
+
+security:
+  - BearerAuth: []
+
+paths:
+  /trending/players:
+    get:
+      summary: Get trending players data
+      description: |
+        Retrieve trending fantasy football players based on add/drop activity.
+        Data is sourced from Sleeper API and cached for performance.
+      operationId: getTrendingPlayers
+      tags:
+        - Trending
+      parameters:
+        - name: type
+          in: query
+          required: false
+          description: Type of trending activity to retrieve
+          schema:
+            type: string
+            enum: [add, drop, both]
+            default: add
+            example: add
+        - name: lookback_hours
+          in: query
+          required: false
+          description: Hours to look back for trending analysis
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 168
+            default: 24
+            example: 24
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of trending players to return
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+            example: 25
+        - name: position_filter
+          in: query
+          required: false
+          description: Filter by player positions
+          schema:
+            type: array
+            items:
+              type: string
+              enum: [QB, RB, WR, TE, K, DEF]
+            example: ["RB", "WR"]
+        - name: week
+          in: query
+          required: false
+          description: Fantasy week (defaults to current week)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 18
+            example: 8
+        - name: season
+          in: query
+          required: false
+          description: Fantasy season (defaults to current season)
+          schema:
+            type: integer
+            minimum: 2024
+            example: 2024
+        - name: refresh
+          in: query
+          required: false
+          description: Force refresh from Sleeper API (bypasses cache)
+          schema:
+            type: boolean
+            default: false
+            example: false
+      responses:
+        '200':
+          description: Successful response with trending players data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrendingPlayersResponse'
+              example:
+                type: "add"
+                lookback_hours: 24
+                week: 8
+                season: 2024
+                cached_at: "2024-10-25T14:15:00Z"
+                expires_at: "2024-10-25T14:30:00Z"
+                trending_players:
+                  - player_id: "4046"
+                    player:
+                      id: "4046"
+                      name: "Jaylen Warren"
+                      position: "RB"
+                      nfl_team: "PIT"
+                      status: "Active"
+                    trend_data:
+                      adds_count: 156
+                      drops_count: 23
+                      net_change: 133
+                      velocity: 6.5
+                    rank: 1
+                  - player_id: "5849"
+                    player:
+                      id: "5849"
+                      name: "Tank Dell"
+                      position: "WR"
+                      nfl_team: "HOU"
+                      status: "Active"
+                    trend_data:
+                      adds_count: 142
+                      drops_count: 18
+                      net_change: 124
+                      velocity: 5.9
+                    rank: 2
+                total_count: 2
+                has_more: true
+        '400':
+          description: Bad request - invalid parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "invalid_parameter"
+                message: "lookback_hours must be between 1 and 168"
+                details:
+                  parameter: "lookback_hours"
+                  value: 200
+        '429':
+          description: Rate limited - too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "rate_limited"
+                message: "Too many requests to trending API"
+                retry_after: 60
+        '503':
+          description: Service unavailable - Sleeper API issues
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "upstream_unavailable"
+                message: "Sleeper API is temporarily unavailable"
+                
+  /trending/players/{player_id}/history:
+    get:
+      summary: Get trending history for specific player
+      description: |
+        Retrieve historical trending data for a specific player over time.
+        Useful for analyzing pickup/drop patterns and momentum.
+      operationId: getPlayerTrendingHistory
+      tags:
+        - Trending
+      parameters:
+        - name: player_id
+          in: path
+          required: true
+          description: Sleeper player ID
+          schema:
+            type: string
+            example: "4046"
+        - name: days
+          in: query
+          required: false
+          description: Number of days of history to retrieve
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 30
+            default: 7
+            example: 7
+        - name: season
+          in: query
+          required: false
+          description: Fantasy season (defaults to current season)
+          schema:
+            type: integer
+            minimum: 2024
+            example: 2024
+      responses:
+        '200':
+          description: Player trending history retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlayerTrendingHistoryResponse'
+              example:
+                player_id: "4046"
+                player:
+                  id: "4046"
+                  name: "Jaylen Warren"
+                  position: "RB"
+                  nfl_team: "PIT"
+                  status: "Active"
+                history:
+                  - date: "2024-10-25"
+                    adds_count: 156
+                    drops_count: 23
+                    net_change: 133
+                    daily_velocity: 6.5
+                    rank: 1
+                  - date: "2024-10-24"
+                    adds_count: 89
+                    drops_count: 15
+                    net_change: 74
+                    daily_velocity: 3.7
+                    rank: 3
+                summary:
+                  total_adds: 245
+                  total_drops: 38
+                  net_change: 207
+                  peak_rank: 1
+                  current_momentum: "increasing"
+        '404':
+          description: Player not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "player_not_found"
+                message: "Player not found in trending data"
+
+  /trending/sync:
+    post:
+      summary: Manual sync of trending data
+      description: |
+        Manually trigger a sync of trending player data from Sleeper API.
+        Typically used for testing or emergency data updates.
+      operationId: syncTrendingData
+      tags:
+        - Trending
+        - Admin
+      security:
+        - AdminAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                force:
+                  type: boolean
+                  description: Force sync even if recent data exists
+                  default: false
+                lookback_hours:
+                  type: integer
+                  description: Hours to sync (defaults to 24)
+                  minimum: 1
+                  maximum: 168
+                  default: 24
+                week:
+                  type: integer
+                  description: Target week (defaults to current)
+                  minimum: 1
+                  maximum: 18
+                season:
+                  type: integer
+                  description: Target season (defaults to current)
+                  minimum: 2024
+              example:
+                force: false
+                lookback_hours: 24
+      responses:
+        '200':
+          description: Sync completed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "completed"
+                  synced_at:
+                    type: string
+                    format: date-time
+                    example: "2024-10-25T14:30:00Z"
+                  players_synced:
+                    type: integer
+                    example: 125
+                  adds_data_points:
+                    type: integer
+                    example: 87
+                  drops_data_points:
+                    type: integer
+                    example: 38
+        '202':
+          description: Sync started (processing in background)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "started"
+                  job_id:
+                    type: string
+                    example: "sync_job_123"
+                  estimated_completion:
+                    type: string
+                    format: date-time
+                    example: "2024-10-25T14:35:00Z"
+        '429':
+          description: Too many sync requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Sleeper API unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token for user authentication
+    AdminAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token with admin privileges
+      
+  schemas:
+    TrendingPlayersResponse:
+      type: object
+      required:
+        - type
+        - lookback_hours
+        - week
+        - season
+        - cached_at
+        - expires_at
+        - trending_players
+        - total_count
+        - has_more
+      properties:
+        type:
+          type: string
+          enum: [add, drop, both]
+          description: Type of trending data returned
+        lookback_hours:
+          type: integer
+          minimum: 1
+          maximum: 168
+          description: Hours analyzed for trending data
+        week:
+          type: integer
+          minimum: 1
+          maximum: 18
+          description: Fantasy week for data
+        season:
+          type: integer
+          minimum: 2024
+          description: Fantasy season year
+        cached_at:
+          type: string
+          format: date-time
+          description: When data was cached
+        expires_at:
+          type: string
+          format: date-time
+          description: When cached data expires
+        trending_players:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrendingPlayer'
+          description: List of trending players ordered by activity
+        total_count:
+          type: integer
+          description: Total number of trending players
+        has_more:
+          type: boolean
+          description: Whether more players are available beyond limit
+          
+    TrendingPlayer:
+      type: object
+      required:
+        - player_id
+        - player
+        - trend_data
+        - rank
+      properties:
+        player_id:
+          type: string
+          description: Sleeper player ID
+          example: "4046"
+        player:
+          $ref: '#/components/schemas/PlayerInfo'
+        trend_data:
+          type: object
+          required:
+            - adds_count
+            - drops_count
+            - net_change
+            - velocity
+          properties:
+            adds_count:
+              type: integer
+              minimum: 0
+              description: Number of adds in lookback period
+              example: 156
+            drops_count:
+              type: integer
+              minimum: 0
+              description: Number of drops in lookback period
+              example: 23
+            net_change:
+              type: integer
+              description: Net adds minus drops
+              example: 133
+            velocity:
+              type: number
+              format: float
+              description: Trending velocity (adds per hour)
+              example: 6.5
+        rank:
+          type: integer
+          minimum: 1
+          description: Ranking among trending players
+          example: 1
+          
+    PlayerTrendingHistoryResponse:
+      type: object
+      required:
+        - player_id
+        - player
+        - history
+        - summary
+      properties:
+        player_id:
+          type: string
+          description: Sleeper player ID
+        player:
+          $ref: '#/components/schemas/PlayerInfo'
+        history:
+          type: array
+          items:
+            type: object
+            required:
+              - date
+              - adds_count
+              - drops_count
+              - net_change
+              - daily_velocity
+              - rank
+            properties:
+              date:
+                type: string
+                format: date
+                description: Date for historical data point
+              adds_count:
+                type: integer
+                description: Total adds on this date
+              drops_count:
+                type: integer
+                description: Total drops on this date
+              net_change:
+                type: integer
+                description: Net change (adds - drops)
+              daily_velocity:
+                type: number
+                format: float
+                description: Daily trending velocity
+              rank:
+                type: integer
+                description: Player's rank among trending players
+          description: Historical trending data ordered by date (newest first)
+        summary:
+          type: object
+          required:
+            - total_adds
+            - total_drops
+            - net_change
+            - peak_rank
+            - current_momentum
+          properties:
+            total_adds:
+              type: integer
+              description: Total adds across all history
+            total_drops:
+              type: integer
+              description: Total drops across all history
+            net_change:
+              type: integer
+              description: Total net change
+            peak_rank:
+              type: integer
+              description: Best rank achieved in period
+            current_momentum:
+              type: string
+              enum: [increasing, decreasing, stable]
+              description: Current trending direction
+              
+    PlayerInfo:
+      type: object
+      required:
+        - id
+        - name
+        - position
+        - nfl_team
+        - status
+      properties:
+        id:
+          type: string
+          description: Sleeper player ID
+          example: "4046"
+        name:
+          type: string
+          description: Player full name
+          example: "Jaylen Warren"
+        position:
+          type: string
+          enum: [QB, RB, WR, TE, K, DEF]
+          description: Primary fantasy position
+          example: "RB"
+        nfl_team:
+          type: string
+          description: NFL team abbreviation
+          example: "PIT"
+          nullable: true
+        status:
+          type: string
+          description: Player status (Active, Injured, etc.)
+          example: "Active"
+        depth_chart_position:
+          type: string
+          description: Position on NFL team depth chart
+          example: "RB2"
+          nullable: true
+          
+    ErrorResponse:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          description: Error code identifier
+          example: "invalid_parameter"
+        message:
+          type: string
+          description: Human-readable error message
+          example: "Invalid request parameters"
+        details:
+          type: object
+          description: Additional error context
+          additionalProperties: true
+        retry_after:
+          type: integer
+          description: Seconds to wait before retrying (for rate limiting)
+          example: 60
+
+tags:
+  - name: Trending
+    description: Trending player data from fantasy football activity
+  - name: Admin
+    description: Administrative operations for trending data management

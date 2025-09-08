@@ -14,5 +14,7 @@ defmodule FantasyManager.Fantasy do
     resource FantasyManager.Fantasy.FantasyTeam
     resource FantasyManager.Fantasy.FantasyTeamPlayer
     resource FantasyManager.Fantasy.WeeklyProjection
+    resource FantasyManager.Fantasy.TrendingPlayerData
+    resource FantasyManager.Fantasy.WaiverRecommendation
   end
 end

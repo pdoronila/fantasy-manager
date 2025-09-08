@@ -66,13 +66,14 @@ defmodule FantasyManagerWeb.Router do
     get "/leagues/dynasty", LeaguesController, :dynasty_leagues
     get "/leagues/:id/teams", LeaguesController, :teams
     
-    # AI Recommendations API
-    post "/recommendations/optimize-lineup", RecommendationsController, :optimize_lineup
-    post "/recommendations/analyze-trade", RecommendationsController, :analyze_trade
-    post "/recommendations/projections", RecommendationsController, :get_projections
-    post "/recommendations/waivers", RecommendationsController, :waiver_suggestions
-    post "/recommendations/keepers", RecommendationsController, :keeper_recommendations
-    get "/recommendations/test", RecommendationsController, :test_connection
+    # Waiver Recommendations API
+    get "/teams/:team_id/recommendations", RecommendationsController, :index
+    patch "/teams/:team_id/recommendations/:recommendation_id/status", RecommendationsController, :update_status
+    
+    # Trending Players API
+    get "/trending/players", TrendingController, :index
+    get "/trending/players/:player_id/history", TrendingController, :history
+    post "/trending/sync", TrendingController, :sync
   end
 
   # Enable LiveDashboard and Swoosh mailbox preview in development

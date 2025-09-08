@@ -243,6 +243,61 @@ defmodule FantasyManager.External.SleeperClient do
   end
 
   @doc """
+  Get trending players from Sleeper API.
+  
+  Args:
+    trend_type - "add" for most added players, "drop" for most dropped players
+  
+  Returns:
+    {:ok, %{player_id => count}} - Map of player IDs to trend counts
+    {:error, reason} - Error details
+  
+  Cached for 15 minutes as trending data changes frequently but not constantly.
+  """
+  def get_trending_players(trend_type) when trend_type in ["add", "drop"] do
+    cache_key = "sleeper:trending:#{trend_type}"
+    
+    case Cachex.get(:sleeper_cache, cache_key) do
+      {:ok, nil} ->
+        case get("/players/nfl/trending/#{trend_type}") do
+          {:ok, %Tesla.Env{status: 200, body: trending_data}} ->
+            # Cache for 15 minutes
+            Cachex.put(:sleeper_cache, cache_key, trending_data, ttl: :timer.minutes(15))
+            {:ok, trending_data}
+          
+          {:ok, %Tesla.Env{status: 404}} ->
+            {:error, "Trending data not found"}
+          
+          {:ok, %Tesla.Env{status: 429}} ->
+            {:error, "API rate limit exceeded"}
+          
+          {:ok, %Tesla.Env{status: status, body: body}} ->
+            Logger.error("Sleeper API error getting trending #{trend_type}: #{status} - #{inspect(body)}")
+            {:error, "API error: #{status}"}
+          
+          {:error, %Tesla.Error{reason: :timeout}} ->
+            Logger.error("Sleeper API timeout getting trending #{trend_type}")
+            {:error, "API timeout"}
+          
+          {:error, reason} ->
+            Logger.error("Sleeper API request failed for trending #{trend_type}: #{inspect(reason)}")
+            {:error, "Network error: #{inspect(reason)}"}
+        end
+      
+      {:ok, cached_trending} ->
+        {:ok, cached_trending}
+      
+      {:error, reason} ->
+        Logger.error("Cache error: #{inspect(reason)}")
+        get_trending_players_direct(trend_type)
+    end
+  end
+  
+  def get_trending_players(trend_type) do
+    {:error, "Invalid trend type: #{trend_type}. Must be 'add' or 'drop'"}
+  end
+
+  @doc """
   Clear all Sleeper-related cache entries.
   Useful for forcing fresh data during development or after errors.
   """
@@ -352,6 +407,25 @@ defmodule FantasyManager.External.SleeperClient do
       
       {:error, reason} ->
         {:error, {:network_error, reason}}
+    end
+  end
+
+  defp get_trending_players_direct(trend_type) do
+    case get("/players/nfl/trending/#{trend_type}") do
+      {:ok, %Tesla.Env{status: 200, body: trending_data}} ->
+        {:ok, trending_data}
+      
+      {:ok, %Tesla.Env{status: 404}} ->
+        {:error, "Trending data not found"}
+      
+      {:ok, %Tesla.Env{status: 429}} ->
+        {:error, "API rate limit exceeded"}
+      
+      {:ok, %Tesla.Env{status: status, body: body}} ->
+        {:error, "API error: #{status}"}
+      
+      {:error, reason} ->
+        {:error, "Network error: #{inspect(reason)}"}
     end
   end
 

@@ -1,4 +1,4 @@
-defmodule Backend.DataCase do
+defmodule FantasyManager.DataCase do
   @moduledoc """
   This module defines the setup for tests requiring
   access to the application's data layer.
@@ -18,17 +18,17 @@ defmodule Backend.DataCase do
 
   using do
     quote do
-      alias Backend.Repo
+      alias FantasyManager.Repo
 
       import Ecto
       import Ecto.Changeset
       import Ecto.Query
-      import Backend.DataCase
+      import FantasyManager.DataCase
     end
   end
 
   setup tags do
-    Backend.DataCase.setup_sandbox(tags)
+    FantasyManager.DataCase.setup_sandbox(tags)
     :ok
   end
 
@@ -36,7 +36,7 @@ defmodule Backend.DataCase do
   Sets up the sandbox based on the test tags.
   """
   def setup_sandbox(tags) do
-    pid = Ecto.Adapters.SQL.Sandbox.start_owner!(Backend.Repo, shared: not tags[:async])
+    pid = Ecto.Adapters.SQL.Sandbox.start_owner!(FantasyManager.Repo, shared: not tags[:async])
     on_exit(fn -> Ecto.Adapters.SQL.Sandbox.stop_owner(pid) end)
   end
 

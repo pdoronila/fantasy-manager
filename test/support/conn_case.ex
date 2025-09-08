@@ -1,4 +1,4 @@
-defmodule BackendWeb.ConnCase do
+defmodule FantasyManagerWeb.ConnCase do
   @moduledoc """
   This module defines the test case to be used by
   tests that require setting up a connection.
@@ -20,19 +20,19 @@ defmodule BackendWeb.ConnCase do
   using do
     quote do
       # The default endpoint for testing
-      @endpoint BackendWeb.Endpoint
+      @endpoint FantasyManagerWeb.Endpoint
 
-      use BackendWeb, :verified_routes
+      use FantasyManagerWeb, :verified_routes
 
       # Import conveniences for testing with connections
       import Plug.Conn
       import Phoenix.ConnTest
-      import BackendWeb.ConnCase
+      import FantasyManagerWeb.ConnCase
     end
   end
 
   setup tags do
-    Backend.DataCase.setup_sandbox(tags)
+    FantasyManager.DataCase.setup_sandbox(tags)
     {:ok, conn: Phoenix.ConnTest.build_conn()}
   end
 end
