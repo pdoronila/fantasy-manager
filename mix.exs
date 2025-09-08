@@ -79,7 +79,9 @@ defmodule FantasyManager.MixProject do
       {:cachex, "~> 3.4"},
       # Additional utility dependencies
       {:hackney, "~> 1.18"},
-      {:httpoison, "~> 2.0"}
+      {:httpoison, "~> 2.0"},
+      # FLAME for process isolation
+      {:flame, "~> 0.5.1"}
     ]
   end
 

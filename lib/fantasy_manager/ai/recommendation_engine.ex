@@ -268,7 +268,7 @@ defmodule FantasyManager.AI.RecommendationEngine do
   defp get_team_with_players(team_id) do
     FantasyTeam
     |> Ash.Query.filter(id == ^team_id)
-    |> Ash.Query.load([:players, :league])
+    |> Ash.Query.load([:roster_players, :league])
     |> Ash.read_one()
     |> case do
       {:ok, nil} -> {:error, :team_not_found}
@@ -280,7 +280,7 @@ defmodule FantasyManager.AI.RecommendationEngine do
   defp get_available_players(team, _week, _season) do
     # Get team's current roster plus any available free agents
     # This would typically involve checking league roster rules
-    {:ok, team.players || []}
+    {:ok, team.roster_players || []}
   end
   
   defp get_player_projections(players, week, season) do
@@ -311,13 +311,13 @@ defmodule FantasyManager.AI.RecommendationEngine do
   
   defp build_lineup_optimization_prompt(_team, league, players, projections, matchup_data, options) do
     """
-    You are a fantasy football AI assistant helping optimize a lineup. 
+    You are a fantasy football AI assistant helping optimize a lineup.
     
     LEAGUE SETTINGS:
     - League Type: #{league.league_type}
-    - Scoring: #{league.scoring_settings}
+    - Scoring: #{format_scoring_settings(league.scoring_settings)}
     - Roster Size: #{league.roster_size}
-    - Starting Lineup: #{league.starting_lineup_requirements}
+    - Starting Lineup: #{format_roster_requirements(league)}
     
     AVAILABLE PLAYERS:
     #{format_players_for_prompt(players)}
@@ -428,10 +428,10 @@ defmodule FantasyManager.AI.RecommendationEngine do
     """
   end
   
-  defp call_claude_for_lineup(prompt, players) do
-    tools = FantasyTools.get_lineup_tools(players)
-    
-    case ClaudeConfig.call_claude_with_tools(prompt, tools) do
+  defp call_claude_for_lineup(prompt, _players) do
+    # For now, use simple call without tools since claude-code doesn't support tools
+    # In the future, we could add tool support to the claude-code integration
+    case ClaudeConfig.call_claude(prompt) do
       {:ok, response} -> parse_lineup_response(response)
       error -> error
     end
@@ -504,7 +504,7 @@ defmodule FantasyManager.AI.RecommendationEngine do
   defp format_players_for_prompt(players) do
     players
     |> Enum.map(fn player ->
-      "- #{player.name} (#{player.position}) - #{player.team} - Age: #{player.age}"
+      "- #{player.name} (#{player.position}) - #{player.nfl_team || "FA"} - Age: #{player.age || "N/A"}"
     end)
     |> Enum.join("\n")
   end
@@ -547,5 +547,35 @@ defmodule FantasyManager.AI.RecommendationEngine do
       })
       |> Ash.create()
     end)
+  end
+
+  defp format_scoring_settings(scoring_settings) when is_map(scoring_settings) do
+    key_scoring_settings = [
+      {"Pass TD", scoring_settings["pass_td"]},
+      {"Pass Yards", scoring_settings["pass_yd"]},
+      {"Rush TD", scoring_settings["rush_td"]},
+      {"Rush Yards", scoring_settings["rush_yd"]},
+      {"Rec TD", scoring_settings["rec_td"]},
+      {"Rec Yards", scoring_settings["rec_yd"]},
+      {"Reception", scoring_settings["rec"]},
+      {"Fumble Lost", scoring_settings["fum_lost"]},
+      {"Interception", scoring_settings["pass_int"]}
+    ]
+    |> Enum.filter(fn {_key, value} -> value end)
+    |> Enum.map(fn {key, value} -> "#{key}: #{value}" end)
+    |> Enum.join(", ")
+    
+    if key_scoring_settings == "", do: "Standard scoring", else: key_scoring_settings
+  end
+
+  defp format_scoring_settings(_), do: "Standard scoring"
+
+  defp format_roster_requirements(league) do
+    # This could be expanded with actual roster requirements
+    # For now, return a standard lineup based on league type
+    case league.league_type do
+      :superflex -> "1 QB, 2 RB, 3 WR, 1 TE, 1 FLEX, 1 SUPERFLEX, 1 K, 1 DEF"
+      _ -> "1 QB, 2 RB, 2 WR, 1 TE, 1 FLEX, 1 K, 1 DEF"
+    end
   end
 end
